@@ -11,7 +11,8 @@ namespace utbot {
                                      bool useStubs,
                                      testsgen::ErrorMode errorMode,
                                      bool differentVariablesOfTheSameType,
-                                     bool skipObjectWithoutSource)
+                                     bool skipObjectWithoutSource,
+                                     bool instrumentUndefinedBehaviour)
             : generateForStaticFunctions(generateForStaticFunctions),
               verbose(verbose),
               timeoutPerFunction(timeoutPerFunction > 0
@@ -23,7 +24,8 @@ namespace utbot {
               useDeterministicSearcher(useDeterministicSearcher), useStubs(useStubs),
               errorMode(errorMode),
               differentVariablesOfTheSameType(differentVariablesOfTheSameType),
-              skipObjectWithoutSource(skipObjectWithoutSource) {
+              skipObjectWithoutSource(skipObjectWithoutSource),
+              instrumentUndefinedBehaviour(instrumentUndefinedBehaviour) {
     }
 
     SettingsContext::SettingsContext(const testsgen::SettingsContext &settingsContext)
@@ -35,6 +37,7 @@ namespace utbot {
                           settingsContext.usestubs(),
                           settingsContext.errormode(),
                           settingsContext.differentvariablesofthesametype(),
-                          settingsContext.skipobjectwithoutsource()) {
+                          settingsContext.skipobjectwithoutsource(),
+                          settingsContext.instrumentundefinedbehaviour()) {
     }
 }

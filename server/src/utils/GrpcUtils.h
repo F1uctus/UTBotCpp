@@ -32,7 +32,8 @@ namespace GrpcUtils {
                           bool useStubs,
                           ErrorMode errorMode,
                           bool differentVariablesOfTheSameType,
-                          bool skipObjectWithoutSource);
+                          bool skipObjectWithoutSource,
+                          bool instrumentUndefinedBehaviour);
 
     std::unique_ptr<testsgen::SnippetRequest>
     createSnippetRequest(std::unique_ptr<testsgen::ProjectContext> projectContext,

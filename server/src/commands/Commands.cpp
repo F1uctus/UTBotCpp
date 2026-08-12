@@ -396,6 +396,12 @@ Commands::SettingsContextOptionGroup::SettingsContextOptionGroup(CLI::App *comma
     settingsContextOptions->add_flag("--no-deterministic-searcher", noDeterministicSearcher,
                                      "Use deterministic searcher to traverse bitcode in the same "
                                      "way every time. It may significantly slow down generation.");
+    settingsContextOptions->add_flag(
+            "--no-ubsan", noUbsan,
+            "Compile the bitcode without UBSan checks. They are what lets KLEE "
+            "report undefined behaviour, and they are expensive: on a large "
+            "project the instrumentation is most of the bitcode, and the whole "
+            "module is reloaded for every method.");
     settingsContextOptions->add_flag("--no-stubs", noStubs,
                                      "True, if you don't want UTBot to use generated stubs from "
                                      "<testsDir>/stubs folder instead real files.");
@@ -439,6 +445,10 @@ bool Commands::SettingsContextOptionGroup::doDifferentVariablesOfTheSameType() c
 
 bool Commands::SettingsContextOptionGroup::getSkipObjectWithoutSource() const {
     return skipObjectWithoutSource;
+}
+
+bool Commands::SettingsContextOptionGroup::doInstrumentUndefinedBehaviour() const {
+    return !noUbsan;
 }
 
 Commands::RunTestsCommands::RunTestsCommands(Commands::MainCommands &commands) {

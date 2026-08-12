@@ -165,26 +165,26 @@ void SourceToHeaderMatchCallback::handleTypedef(const TypedefDecl *decl) {
          * @code typedef struct { int x; } Y;
          */
         policy.IncludeTagDefinition = 1;
-    } else if (const clang::TagDecl *tagDecl = canonicalType->getAsTagDecl()) {
+    } else if (const clang::TagDecl *tagDecl = canonicalType->getAsTagDecl();
+               tagDecl && tagDecl->getIdentifier() == nullptr && externalStream != nullptr) {
         /*
          * One declaration can give an unnamed tag several names:
          * @code typedef enum {RESET = 0, SET = !RESET} FlagStatus, ITStatus;
-         * The first typedef prints the enum body, by the branch above. The rest
-         * name a type whose only name is a typedef, and print as
+         * The first typedef prints the enum body, by the branch above. Each of
+         * the rest names a type whose only name is a typedef, and clang prints
+         * it from the type as written, which yields
          * @code typedef enum FlagStatus ITStatus;
-         * which spells a typedef name where a tag is required. C accepts it --
-         * tags and ordinary identifiers live in separate namespaces there -- but
-         * this header is included by the generated tests, which are C++, and
-         * there it is an error.
+         * -- a typedef name where a tag is required. C accepts that, since tags
+         * and ordinary identifiers are separate namespaces there, but this
+         * header is included by the generated tests, which are C++.
          *
-         * Dropping the keyword gives @code typedef FlagStatus ITStatus; which
-         * both languages accept. It is dropped only for a tag that has no name
-         * of its own, since for a real tag the keyword is what makes the
-         * declaration valid C.
+         * SuppressTagKeyword does not reach it, because the declaration is
+         * printed from the written type rather than the canonical one. The
+         * canonical type spells the name on its own, so the declaration is
+         * written out directly instead.
          */
-        if (tagDecl->getIdentifier() == nullptr && tagDecl->getTypedefNameForAnonDecl()) {
-            policy.SuppressTagKeyword = 1;
-        }
+        *externalStream << "typedef " << decorate(canonicalName) << " " << decorate(name) << ";\n";
+        return;
     }
     print(decl, policy);
 }

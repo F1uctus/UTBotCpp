@@ -276,7 +276,6 @@ KleeRunner::createKleeParams(const tests::TestMethod &testMethod,
         "--check-overshift=false",
         "--skip-not-symbolic-objects",
         "--use-tbaa",
-        "--ubsan-runtime",
         // KLEE's default cap is 2000MB, and it counts the deterministic
         // allocator's usage as well as its own heap. A whole-project module is
         // over that before any exploration happens -- on T1100 the initial
@@ -292,6 +291,10 @@ KleeRunner::createKleeParams(const tests::TestMethod &testMethod,
     }
     if (settingsContext.useDeterministicSearcher) {
         argvData.emplace_back("--search=dfs");
+    }
+    if (settingsContext.instrumentUndefinedBehaviour) {
+        // Only worth linking when the bitcode actually calls the handlers.
+        argvData.emplace_back("--ubsan-runtime");
     }
     if (settingsContext.timeoutPerFunction.has_value()) {
         // Tell KLEE the budget rather than only killing it when the budget
