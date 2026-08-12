@@ -30,8 +30,23 @@ namespace CompilationUtils {
     static inline const std::string UTBOT_FILES_DIR_NAME = "utbot_files";
     static inline const std::string UTBOT_BUILD_DIR_NAME = "utbot_build";
 
+    // A build recipe runs through the platform's shell, and the two do not
+    // share a spelling for any of this.
+    //
+    // cmd has no "mkdir -p", but its mkdir already creates intermediate
+    // directories; what it lacks is tolerance of the directory existing, hence
+    // swallowing the failure. "cd ." is the no-op that makes the || succeed --
+    // cmd has no "true". "cd /d" is needed because a bare cd will not cross
+    // drives, and the build tree and the sources often sit on different ones.
+#ifdef _WIN32
+    static inline const std::string FULL_COMMAND_PATTERN_WITH_CD =
+            R"(cd /d "%s" && (mkdir "%s" 2>nul || cd .) && %s)";
+    static inline const std::string FULL_COMMAND_PATTERN =
+            R"((mkdir "%s" 2>nul || cd .) && %s)";
+#else
     static inline const std::string FULL_COMMAND_PATTERN_WITH_CD = R"(cd "%s" && mkdir -p %s && %s)";
     static inline const std::string FULL_COMMAND_PATTERN = R"(mkdir -p %s && %s)";
+#endif
 
     std::string getBuildDirectoryName(CompilerName compilerName);
 
