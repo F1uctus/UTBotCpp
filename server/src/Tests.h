@@ -9,7 +9,7 @@
 #include "utils/PrinterUtils.h"
 #include "utils/SizeUtils.h"
 #include "json.hpp"
-#include <klee/KTest.h>
+#include <klee/ADT/KTest.h>
 #include <tsl/ordered_map.h>
 #include <tsl/ordered_set.h>
 #include "Paths.h"
