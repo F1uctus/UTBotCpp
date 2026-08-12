@@ -452,7 +452,7 @@ void KleeRunner::processBatchWithoutInteractive(const std::vector<tests::TestMet
             LOG_S(DEBUG) << "Klee command: " + StringUtils::joinWith(argvData, " ");
             MEASURE_FUNCTION_EXECUTION_TIME
 
-            ExecUtils::ExecutionResult result __attribute__((unused)) =
+            [[maybe_unused]] ExecUtils::ExecutionResult result =
                 runKleeProcess(argvData, settingsContext.timeoutPerFunction);
             ExecUtils::throwIfCancelled();
 
@@ -508,7 +508,7 @@ void KleeRunner::processBatchWithInteractive(const std::vector<tests::TestMethod
         LOG_S(DEBUG) << "Klee command: " + StringUtils::joinWith(argvData, " ");
         MEASURE_FUNCTION_EXECUTION_TIME
 
-        ExecUtils::ExecutionResult result __attribute__((unused)) = runKleeProcess(
+        [[maybe_unused]] ExecUtils::ExecutionResult result = runKleeProcess(
             argvData,
             settingsContext.timeoutPerFunction.has_value()
                 ? settingsContext.timeoutPerFunction.value() * testMethods.size()

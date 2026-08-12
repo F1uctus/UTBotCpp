@@ -347,8 +347,18 @@ jobs:
             Write-Host 'Restoring the cached packages'
             Copy-Item -Recurse -Force (Join-Path $cached '*') (Join-Path $vcpkg 'installed')
           } else {
-            & (Join-Path $vcpkg 'vcpkg.exe') install grpc:x64-windows protobuf:x64-windows
-            if ($LASTEXITCODE -ne 0) { throw 'installing grpc failed' }
+            # Retried: every failure here so far has been a download, not a
+            # build -- vcpkg fetching its own ninja, or the release CDN
+            # refusing. An hour-long build should not be discarded for one of
+            # them.
+            $installed = $false
+            foreach ($attempt in 1..3) {
+              & (Join-Path $vcpkg 'vcpkg.exe') install grpc:x64-windows protobuf:x64-windows
+              if ($LASTEXITCODE -eq 0) { $installed = $true; break }
+              Write-Host "::warning::vcpkg install attempt $attempt failed"
+              Start-Sleep -Seconds 30
+            }
+            if (-not $installed) { throw 'installing grpc failed after 3 attempts' }
             New-Item -ItemType Directory -Path $cached -Force | Out-Null
             Copy-Item -Recurse -Force (Join-Path $vcpkg 'installed\*') $cached
           }

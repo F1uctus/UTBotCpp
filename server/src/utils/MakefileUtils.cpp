@@ -11,6 +11,7 @@
 
 #include "loguru.h"
 
+#include <fstream>
 #include <thread>
 
 namespace MakefileUtils {
@@ -47,10 +48,13 @@ namespace MakefileUtils {
         }
         std::vector<std::string> makeCommand = getMakeCommand(this->makefile, this->target, false);
         argv.insert(argv.begin(), makeCommand.begin(), makeCommand.end());
-        runCommand = ShellExecTask::ExecutionParameters("env", argv);
-        printCommand = ShellExecTask::ExecutionParameters("env", argv);
+        // No "env" in front. The variables sit after the make command, so they
+        // were never env's to set -- make reads a trailing NAME=VALUE as one of
+        // its own overrides. The wrapper did nothing but require a program that
+        // does not exist on Windows.
+        runCommand = ShellExecTask::ExecutionParameters(makeCommand.front(), argv);
+        printCommand = ShellExecTask::ExecutionParameters(makeCommand.front(), argv);
         printCommand.argv.emplace_back("-n");
-        echoCommand = ShellExecTask::ExecutionParameters("echo");
     }
 
     ExecUtils::ExecutionResult
@@ -63,12 +67,10 @@ namespace MakefileUtils {
             failedCommand = &printCommand;
             return print;
         }
-        // This writes \n to logFile to separate runs.
-        auto echo = ShellExecTask::runShellCommandTaskToFile(echoCommand, logFile, buildPath);
-        if (echo.status != 0) {
-            failedCommand = &echoCommand;
-            return echo;
-        }
+        // Separate one run from the next in the log. Appending a newline does
+        // not need a process, and spawning "echo" for it needed one that
+        // Windows has only as a shell builtin.
+        std::ofstream(logFile, std::ios::app) << '\n';
         auto exec = ShellExecTask::runShellCommandTask(
                 runCommand, buildPath, projectName, redirectStderr, false, ignoreErrors, timeout);
         if (exec.status != 0) {

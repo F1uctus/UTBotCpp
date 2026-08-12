@@ -14,7 +14,7 @@ namespace MakefileUtils {
         fs::path makefile;
         std::string target;
         std::string projectName;
-        ShellExecTask::ExecutionParameters runCommand, printCommand, echoCommand;
+        ShellExecTask::ExecutionParameters runCommand, printCommand;
         fs::path logFile;
         mutable ShellExecTask::ExecutionParameters const * failedCommand = nullptr;
     public:
