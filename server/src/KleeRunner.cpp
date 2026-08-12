@@ -307,6 +307,18 @@ KleeRunner::createKleeParams(const tests::TestMethod &testMethod,
         // that used its whole budget produced an empty result.
         argvData.emplace_back(
             "--max-time=" + std::to_string(settingsContext.timeoutPerFunction->count()) + "s");
+#ifndef _WIN32
+        // --max-time is only checked between instructions, so a run that is
+        // inside one long solver query sails past it: on T1100 about one
+        // function in twenty ran until the external kill instead, and those few
+        // took the majority of the wall clock. The watchdog is a second process
+        // that enforces the deadline from outside, which is the only thing that
+        // can.
+        //
+        // It forks, so it is POSIX-only; on Windows the external kill stays the
+        // sole enforcement, which is why that is sized as a backstop.
+        argvData.emplace_back("--watchdog");
+#endif
     }
     if (testMethod.is32bits) {
         // 32bit project
