@@ -37,32 +37,28 @@ KleeGenerator::buildByCDb(const CollectionUtils::MapFileTo<fs::path> &filesToBui
                           const CollectionUtils::FileSet &stubSources) {
     LOG_SCOPE_FUNCTION(DEBUG);
     auto compileCommands = getCompileCommandsForKlee(filesToBuild, stubSources);
-    printer::DefaultMakefilePrinter makefilePrinter;
 
-    std::vector<std::string> outfilePaths;
+    // Run the compilations rather than describing them to make.
+    //
+    // These are independent -- one source, one bitcode file, no target here
+    // consumes another's output -- so a build tool is buying nothing but the
+    // parallelism, and it costs a dependency on make and on a POSIX shell to
+    // interpret the recipes, neither of which exists on Windows.
+    //
+    // The directory each output goes in is created here, since that is what the
+    // recipe's mkdir was for.
     for (const auto &compileCommand: compileCommands) {
-        fs::path output = compileCommand.getOutput();
-        outfilePaths.emplace_back(output);
-        utbot::CompileCommand compileCommandWithChangingDirectory{compileCommand, true};
-        makefilePrinter.declareTarget(output, {compileCommandWithChangingDirectory.getSourcePath()},
-                                      {compileCommandWithChangingDirectory.toStringWithChangingDirectory()});
-    }
-
-    outfilePaths.push_back(printer::DefaultMakefilePrinter::TARGET_FORCE);
-    makefilePrinter.declareTarget(printer::DefaultMakefilePrinter::TARGET_ALL, outfilePaths, {});
-    const fs::path makefile = testGen->serverBuildDir / GENERATION_COMPILE_MAKEFILE;
-    FileSystemUtils::writeToFile(makefile, makefilePrinter.ss.str());
-
-    auto command = MakefileUtils::MakefileCommand(testGen->projectContext, makefile,
-                                                  printer::DefaultMakefilePrinter::TARGET_ALL);
-    ExecUtils::ExecutionResult res = command.run();
-    if (res.status != 0) {
-        LOG_S(ERROR) << StringUtils::stringFormat("Make for \"%s\" failed.\nCommand: \"%s\"\n%s\n",
-                                                  makefile, command.getFailedCommand(), res.output);
-        throw ExecutionProcessException(
-                command.getFailedCommand(),
-                res.outPath.value()
-        );
+        fs::create_directories(compileCommand.getOutput().parent_path());
+        ExecUtils::ExecutionResult res = ShellExecTask::executeUtbotCommand(
+                compileCommand, compileCommand.getDirectory(),
+                testGen->projectContext.projectName);
+        if (res.status != 0) {
+            LOG_S(ERROR) << StringUtils::stringFormat(
+                    "Compiling \"%s\" failed.\nCommand: \"%s\"\n%s\n",
+                    compileCommand.getSourcePath(), compileCommand.toString(), res.output);
+            throw ExecutionProcessException(compileCommand.toString(),
+                                            res.outPath.value_or(fs::path{}));
+        }
     }
 
     auto outFiles = CollectionUtils::transform(
@@ -227,21 +223,13 @@ Result<fs::path> KleeGenerator::defaultBuild(const fs::path &hintPath,
     command.setSourcePath(sourceFilePath);
     command.setOutput(bitcodeFilePath);
 
-    printer::DefaultMakefilePrinter makefilePrinter;
-    auto commandWithChangingDirectory = utbot::CompileCommand(command, true);
-    makefilePrinter.declareTarget(printer::DefaultMakefilePrinter::TARGET_BUILD,
-                                  {commandWithChangingDirectory.getSourcePath(),
-                                   printer::DefaultMakefilePrinter::TARGET_FORCE},
-                                  {commandWithChangingDirectory.toStringWithChangingDirectory()});
-    fs::path makefile = testGen->serverBuildDir / GENERATION_KLEE_MAKEFILE;
-    FileSystemUtils::writeToFile(makefile, makefilePrinter.ss.str());
-
-    auto makefileCommand = MakefileUtils::MakefileCommand(testGen->projectContext, makefile,
-                                                          printer::DefaultMakefilePrinter::TARGET_BUILD);
-    auto [out, status, _] = makefileCommand.run();
+    // One compilation, run directly; see buildByCDb for why not through make.
+    fs::create_directories(command.getOutput().parent_path());
+    auto [out, status, _] = ShellExecTask::executeUtbotCommand(
+            command, command.getDirectory(), testGen->projectContext.projectName);
     if (status != 0) {
         LOG_S(ERROR) << "Compilation for " << sourceFilePath << " failed.\n"
-                     << "Command: \"" << commandWithChangingDirectory.toString() << "\"\n"
+                     << "Command: \"" << command.toString() << "\"\n"
                      << "Directory: " << buildDirPath << "\n"
                      << out << "\n";
         return out;
