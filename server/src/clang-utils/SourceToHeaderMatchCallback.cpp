@@ -324,7 +324,7 @@ void SourceToHeaderMatchCallback::generateUnnamedTypeDecls(const clang::RecordDe
         return;
     }
     clang::ASTContext const &context = decl->getASTContext();
-    clang::QualType canonicalType = context.getTypeDeclType(decl).getCanonicalType();
+    clang::QualType canonicalType = context.getCanonicalTagType(decl);
     uint64_t id = types::Type::getIdFromCanonicalType(canonicalType);
     if (typesHandler.isStructLike(id)) {
         types::StructInfo info = typesHandler.getStructInfo(id);

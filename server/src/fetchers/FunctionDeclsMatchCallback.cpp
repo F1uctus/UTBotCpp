@@ -69,7 +69,8 @@ void FunctionDeclsMatchCallback::run(const MatchFinder::MatchResult &Result) {
 
         if (FS->isCXXClassMember() && !methodDescription.isConstructor()) {
             std::string className = nodeParent->getNameAsString();
-            const clang::QualType clangClassType = nodeParent->getTypeForDecl()->getCanonicalTypeInternal();
+            const clang::QualType clangClassType =
+                nodeParent->getASTContext().getCanonicalTagType(nodeParent);
             auto classType = ParamsHandler::getType(clangClassType, clangClassType, sourceManager);
             methodDescription.classObj = {classType,
                                           classType.typeName() + "_obj",

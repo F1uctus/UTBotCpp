@@ -8,7 +8,8 @@ namespace Matchers {
               hasParent(decl(anyOf(namespaceDecl(), translationUnitDecl()))));
 
     AST_MATCHER(clang::TagDecl, hasIndependentType) {
-        auto isDependentType = Node.getTypeForDecl()->isDependentType();
+        auto isDependentType =
+            Node.getASTContext().getCanonicalTagType(&Node)->isDependentType();
         return !isDependentType;
     }
 
@@ -31,21 +32,17 @@ namespace Matchers {
     const DeclarationMatcher typedefStructMatcher =
         typedefDecl(
             hasType(
-                elaboratedType(
-                    namesType(
-                        recordType(
-                            hasDeclaration(
-                                recordDecl(isStruct(), isDefinition(), hasIndependentType()).bind(INNER_TYPEDEF_STRUCT_OR_CLASS_DECL)))))))
+                recordType(
+                    hasDeclaration(
+                        recordDecl(isStruct(), isDefinition(), hasIndependentType()).bind(INNER_TYPEDEF_STRUCT_OR_CLASS_DECL)))))
             .bind(TYPEDEF_STRUCT_OR_CLASS_DECL);
 
     const DeclarationMatcher typedefClassMatcher =
         typedefDecl(
             hasType(
-                elaboratedType(
-                    namesType(
-                        recordType(
-                            hasDeclaration(
-                                recordDecl(isClass(), isDefinition(), hasIndependentType()).bind(INNER_TYPEDEF_STRUCT_OR_CLASS_DECL)))))))
+                recordType(
+                    hasDeclaration(
+                        recordDecl(isClass(), isDefinition(), hasIndependentType()).bind(INNER_TYPEDEF_STRUCT_OR_CLASS_DECL)))))
                   .bind(TYPEDEF_STRUCT_OR_CLASS_DECL);
 
     const DeclarationMatcher toplevelStructMatcher =
@@ -62,12 +59,10 @@ namespace Matchers {
     const DeclarationMatcher typedefEnumMatcher =
         typedefDecl(
             hasType(
-                elaboratedType(
-                    namesType(
-                        enumType(
-                            hasDeclaration(
-                                enumDecl(isDefinition(), hasIndependentType())
-                                    .bind(INNER_TYPEDEF_ENUM_DECL)))))))
+                enumType(
+                    hasDeclaration(
+                        enumDecl(isDefinition(), hasIndependentType())
+                            .bind(INNER_TYPEDEF_ENUM_DECL)))))
             .bind(TYPEDEF_ENUM_DECL);
     const DeclarationMatcher toplevelEnumMatcher =
         enumDecl(TopLevelDecl, hasIndependentType())
@@ -78,11 +73,9 @@ namespace Matchers {
     const DeclarationMatcher typedefUnionMatcher =
         typedefDecl(
             hasType(
-                elaboratedType(
-                    namesType(
-                        recordType(
-                            hasDeclaration(
-                                recordDecl(isUnion(), isDefinition(), hasIndependentType()).bind(INNER_TYPEDEF_UNION_DECL)))))))
+                recordType(
+                    hasDeclaration(
+                        recordDecl(isUnion(), isDefinition(), hasIndependentType()).bind(INNER_TYPEDEF_UNION_DECL)))))
             .bind(TYPEDEF_UNION_DECL);
     const DeclarationMatcher toplevelUnionMatcher =
         recordDecl(isUnion(), TopLevelDecl, hasIndependentType()).bind(TOPLEVEL_UNION_DECL);

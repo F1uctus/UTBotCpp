@@ -329,20 +329,22 @@ Commands::ProjectContextOptionGroup::ProjectContextOptionGroup(CLI::App *command
             ->required();
 
     projectContextOptions->add_option(
-            "-t,--tests-dir", testRelDir, "Relative path to directory in which tests will be generated.",
-            true);
+            "-t,--tests-dir", testRelDir, "Relative path to directory in which tests will be generated.")
+                ->capture_default_str();
 
     projectContextOptions->add_option(
-            "-r,--report-dir", reportRelDir, "Relative path to directory in which sarif report will be generated.",
-            true);
+            "-r,--report-dir", reportRelDir, "Relative path to directory in which sarif report will be generated.")
+                ->capture_default_str();
 
     projectContextOptions->add_option(
             "-b,--build-dir", buildRelDir,
-            "Relative path to build directory with compile_commands.json and/or coverage.json.", true);
+            "Relative path to build directory with compile_commands.json and/or coverage.json.")
+            ->capture_default_str();
 
     projectContextOptions->add_option(
             "-i,--init-teardown-path", itfRelPath,
-            "Relative paths to json, that contains list of initial and teardown functions", true);
+            "Relative paths to json, that contains list of initial and teardown functions")
+            ->capture_default_str();
 }
 
 CLI::Option_group *Commands::ProjectContextOptionGroup::getProjectContextOptions() const {
@@ -385,12 +387,12 @@ Commands::SettingsContextOptionGroup::SettingsContextOptionGroup(CLI::App *comma
                                      "Set if is required.");
     settingsContextOptions->add_option("--function-timeout", timeoutPerFunction,
                                        "Maximum time (in seconds) is allowed for generation tests "
-                                       "per function. Set to non-positive number to disable it.",
-                                       true);
+                                       "per function. Set to non-positive number to disable it.")
+                                           ->capture_default_str();
     settingsContextOptions->add_option("--test-timeout", timeoutPerTest,
                                        "Maximum time (in seconds) is allowed for running a single "
-                                       "test. Set to non-positive number to disable it.",
-                                       true);
+                                       "test. Set to non-positive number to disable it.")
+                                           ->capture_default_str();
     settingsContextOptions->add_flag("--no-deterministic-searcher", noDeterministicSearcher,
                                      "Use deterministic searcher to traverse bitcode in the same "
                                      "way every time. It may significantly slow down generation.");

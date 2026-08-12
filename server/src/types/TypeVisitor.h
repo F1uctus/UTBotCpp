@@ -9,7 +9,7 @@ class TypeVisitor : public clang::RecursiveASTVisitor<TypeVisitor> {
 public:
     // Warning 'function TraverseType hides a non-virtual function from class RecursiveASTVisitor<TypeVisitor>`
     // is totally fine.
-    bool TraverseType(clang::QualType type);
+    bool TraverseType(clang::QualType type, bool traverseQualifier = true);
 
     std::vector<std::shared_ptr<AbstractType>> getKinds();
 

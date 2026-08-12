@@ -34,11 +34,13 @@ bool isCandidateToReplace(uint64_t id,
 }
 
 static size_t getRecordSize(const clang::RecordDecl *D) {
-    return D->getASTContext().getTypeSize(D->getASTContext().getRecordType(D));
+    return D->getASTContext().getTypeSize(
+        D->getASTContext().getCanonicalTagType(D));
 }
 
 static size_t getDeclAlignment(const clang::TagDecl *T) {
-    return T->getASTContext().getTypeAlign(T->getTypeForDecl()) / 8;
+    return T->getASTContext().getTypeAlign(
+               T->getASTContext().getCanonicalTagType(T)) / 8;
 }
 
 template<class Info>
@@ -69,8 +71,8 @@ std::string TypesResolver::getFullname(const clang::TagDecl *TD, const clang::Qu
 
     if (Paths::getSourceLanguage(sourceFilePath) == utbot::Language::C || typeDeclNeeded) {
         if (const auto *parentNode = llvm::dyn_cast<const clang::RecordDecl>(TD->getLexicalParent())) {
-            clang::QualType parentCanonicalType = parentNode->getASTContext().getTypeDeclType(
-                    parentNode).getCanonicalType();
+            clang::QualType parentCanonicalType =
+                parentNode->getASTContext().getCanonicalTagType(parentNode);
             uint64_t parentID = types::Type::getIdFromCanonicalType(parentCanonicalType);
             if (!fullname[parentID].empty()) {
                 fullname[id] = fullname[parentID] + "::" + fullname[id];
@@ -95,7 +97,7 @@ void TypesResolver::resolveStructEx(const clang::RecordDecl *D, const std::strin
     clang::ASTContext const &context = D->getASTContext();
     clang::SourceManager const &sourceManager = context.getSourceManager();
 
-    clang::QualType canonicalType = context.getTypeDeclType(D).getCanonicalType();
+    clang::QualType canonicalType = context.getCanonicalTagType(D);
     uint64_t id = types::Type::getIdFromCanonicalType(canonicalType);
     if (!isCandidateToReplace(id, parent->projectTypes->structs, name)) {
         return;
@@ -126,7 +128,7 @@ void TypesResolver::resolveStructEx(const clang::RecordDecl *D, const std::strin
     std::vector<types::Field> fields;
 
     for (const clang::FieldDecl *F: D->fields()) {
-        if (F->isUnnamedBitfield()) {
+        if (F->isUnnamedBitField()) {
             continue;
         }
         types::Field field;
@@ -160,7 +162,7 @@ void TypesResolver::resolveStructEx(const clang::RecordDecl *D, const std::strin
                     F->getType()->getPointeeType()->getPointeeType()->getAs<clang::FunctionType>(),
                     field.name, sourceManager, field.type.isArrayOfPointersToFunction());
         }
-        field.size = F->isBitField() ? F->getBitWidthValue(context) : context.getTypeSize(F->getType());
+        field.size = F->isBitField() ? F->getBitWidthValue() : context.getTypeSize(F->getType());
         field.offset = context.getFieldOffset(F);
         if (LogUtils::isMaxVerbosity()) {
             ss << "\n\t" << field.type.typeName() << " " << field.name << ";";
@@ -230,7 +232,7 @@ void TypesResolver::resolveEnum(const clang::EnumDecl *EN, const std::string &na
     clang::ASTContext const &context = EN->getASTContext();
     clang::SourceManager const &sourceManager = context.getSourceManager();
 
-    clang::QualType canonicalType = context.getTypeDeclType(EN).getCanonicalType();
+    clang::QualType canonicalType = context.getCanonicalTagType(EN);
     uint64_t id = types::Type::getIdFromCanonicalType(canonicalType);
     if (!isCandidateToReplace(id, parent->projectTypes->enums, name)) {
         return;

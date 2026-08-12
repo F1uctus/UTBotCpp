@@ -24,10 +24,11 @@ public:
                             llvm::StringRef file_name,
                             bool is_angled,
                             clang::CharSourceRange filename_range,
-                            const clang::FileEntry *file,
+                            clang::OptionalFileEntryRef file,
                             llvm::StringRef search_path,
                             llvm::StringRef relative_path,
-                            const clang::Module *imported,
+                            const clang::Module *suggested_module,
+                            bool module_imported,
                             clang::SrcMgr::CharacteristicKind fileType) override {
         ExecUtils::throwIfCancelled();
 

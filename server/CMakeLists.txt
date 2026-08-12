@@ -52,6 +52,13 @@ include_directories(${CLANG_INCLUDE_DIRS})
 add_definitions(${LLVM_DEFINITIONS})
 add_definitions(${CLANG_DEFINITIONS})
 
+# LLVM is built without exceptions or RTTI and AddLLVM propagates -fno-exceptions
+# to anything that includes it, landing after the -fexceptions requested above.
+# The server needs both -- it catches by reference throughout and the gRPC and
+# CLI11 headers do too -- so they are re-asserted here, after LLVM has had its
+# say.
+add_compile_options(-fexceptions -frtti)
+
 add_definitions(-DUTBOT_DEV_ROOT_DIR="$ENV{UTBOT_ALL}")
 
 set(GRPC_PATH $ENV{GRPC_PATH})
@@ -90,6 +97,13 @@ include_directories(${PARALLEL_HASHMAP_PATH})
 
 set(KLEE_PATH $ENV{UTBOT_ALL}/klee/)
 include_directories(${KLEE_PATH}/include)
+
+# KLEE itself is not linked -- it is spawned as a process -- but its test cases
+# still have to be read back, and the .ktest reader is one self-contained C++
+# file with no dependency on the rest of KLEE. Compiling just that keeps the
+# format definition and the code parsing it in step without needing a KLEE build.
+add_library(kleeKTest STATIC ${KLEE_PATH}/lib/Basic/KTest.cpp)
+target_include_directories(kleeKTest PUBLIC ${KLEE_PATH}/include)
 
 set(CLI_PATH $ENV{CLI_PATH})
 include_directories(${CLI_PATH})
@@ -173,6 +187,7 @@ target_link_libraries(UTBotCppLib PUBLIC clangTooling clangBasic clangASTMatcher
         gRPC::grpc++
         protobuf::libprotobuf
         loguru
+        kleeKTest
         )
 if (ENABLE_PRECOMPILED_HEADERS)
     target_precompile_headers(UTBotCppLib PUBLIC pch.h)
@@ -181,6 +196,12 @@ endif ()
 ################################################################################
 # Executable
 ################################################################################
+# add_llvm_executable runs llvm_update_compile_flags, which applies LLVM's own
+# -fno-exceptions and -fno-rtti to the target. The server needs both, and so do
+# the gRPC and CLI11 headers it includes; these are the flags LLVM documents for
+# a target to say so.
+set(LLVM_REQUIRES_EH ON)
+set(LLVM_REQUIRES_RTTI ON)
 add_llvm_executable(utbot main.cpp)
 target_link_libraries(utbot PUBLIC
         UTBotCppLib
