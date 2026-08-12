@@ -64,9 +64,20 @@ void TestsPrinter::joinToFinalCode(Tests &tests, const fs::path& generatedHeader
     genHeaders(tests, generatedHeaderPath);
     ss << printer::NL;
 
-    strDeclareSetOfExternVars(tests.externVariables);
-
     ss << "namespace " << PrinterUtils::TEST_NAMESPACE << " {\n";
+
+    // Inside the namespace, not before it. The generated header puts the
+    // project's types in this namespace, so a global-scope declaration cannot
+    // name them: "extern \"C\" word_err Error_s;" does not compile, while
+    // "extern \"C\" struct ExtDataSet Ext_SARD_Set;" does, because an
+    // elaborated specifier declares a new incomplete type rather than failing.
+    // So a project whose globals are typedefs -- most C firmware -- produced a
+    // test file that could not be compiled, and one whose globals are tagged
+    // structs produced one that could.
+    //
+    // extern "C" keeps C linkage inside a namespace; only the name used to look
+    // it up changes, and every test body here is in this namespace too.
+    strDeclareSetOfExternVars(tests.externVariables);
 
     for (const auto &commentBlock : tests.commentBlocks) {
         strComment(commentBlock) << printer::NL;
