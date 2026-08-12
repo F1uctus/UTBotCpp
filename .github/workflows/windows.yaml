@@ -213,32 +213,39 @@ jobs:
 
       - name: Build SQLite3
         run: |
-          # KLEE needs SQLite3 and the runner has none. The amalgamation is one
-          # translation unit, so building it is cheaper than fetching a package.
+          # KLEE needs SQLite3 for its statistics database and Windows has no
+          # system copy. The amalgamation is a single translation unit, so
+          # building it here takes seconds and avoids depending on a package
+          # manager's idea of which CRT it was built against -- which matters,
+          # because it has to match the /MT the prebuilt LLVM forces.
           $deps = Join-Path (Split-Path -Parent $env:GITHUB_WORKSPACE) 'deps'
-          $sqlite = Join-Path $deps 'sqlite'
-          if (Test-Path -LiteralPath (Join-Path $sqlite 'lib\sqlite3.lib')) {
-            Write-Host 'Already built'
-          } else {
-            New-Item -ItemType Directory -Path $sqlite -Force | Out-Null
-            $zip = Join-Path $deps 'sqlite.zip'
-            curl.exe --fail --location --silent --show-error --output $zip `
-              'https://www.sqlite.org/2024/sqlite-amalgamation-3450100.zip'
-            Expand-Archive -LiteralPath $zip -DestinationPath $sqlite -Force
-            $src = Get-ChildItem -LiteralPath $sqlite -Directory |
-                   Where-Object { $_.Name -like 'sqlite-amalgamation-*' } |
-                   Select-Object -First 1
-            New-Item -ItemType Directory -Path (Join-Path $sqlite 'lib') -Force | Out-Null
-            New-Item -ItemType Directory -Path (Join-Path $sqlite 'include') -Force | Out-Null
-            Push-Location $src.FullName
-            cl.exe /nologo /c /MT /O2 /DSQLITE_ENABLE_COLUMN_METADATA sqlite3.c
-            if ($LASTEXITCODE -ne 0) { throw 'compiling sqlite3 failed' }
-            lib.exe /nologo /OUT:(Join-Path $sqlite 'lib\sqlite3.lib') sqlite3.obj
-            if ($LASTEXITCODE -ne 0) { throw 'archiving sqlite3 failed' }
-            Copy-Item sqlite3.h, sqlite3ext.h (Join-Path $sqlite 'include')
+          $version = '3530400'
+          $zip = Join-Path $deps 'sqlite.zip'
+          curl.exe --fail --location --silent --show-error --output $zip `
+            "https://www.sqlite.org/2026/sqlite-amalgamation-$version.zip"
+
+          $expected = '1e71ddf93849c6a6ecf58b827c0692073d2dd7ee40196158068f7b29f422e87d'
+          $actual = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLower()
+          if ($actual -ne $expected) {
+            throw "sqlite amalgamation hash mismatch`nexpected $expected`ngot      $actual"
+          }
+
+          Expand-Archive -LiteralPath $zip -DestinationPath $deps -Force
+          $src = Join-Path $deps "sqlite-amalgamation-$version"
+
+          Push-Location $src
+          try {
+            & "$env:LLVM_ROOT\bin\clang-cl.exe" /nologo /c /MT /O2 /DNDEBUG `
+              /DSQLITE_ENABLE_COLUMN_METADATA sqlite3.c
+            if ($LASTEXITCODE -ne 0) { throw 'compiling sqlite3.c failed' }
+            & "$env:LLVM_ROOT\bin\llvm-lib.exe" /nologo /out:sqlite3.lib sqlite3.obj
+            if ($LASTEXITCODE -ne 0) { throw 'archiving sqlite3.lib failed' }
+          } finally {
             Pop-Location
           }
-          "SQLITE_ROOT=$sqlite" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+          "SQLITE_ROOT=$src" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "SQLite3 $version at $src"
 
       - name: Build and install KLEE
         timeout-minutes: 60
@@ -257,8 +264,8 @@ jobs:
             -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded `
             -DLLVM_DIR="$env:LLVM_ROOT\lib\cmake\llvm" `
             -DENABLE_SOLVER_Z3=ON -DZ3_DIR="$deps\z3" `
-            -DSQLite3_INCLUDE_DIR="$env:SQLITE_ROOT\include" `
-            -DSQLite3_LIBRARY="$env:SQLITE_ROOT\lib\sqlite3.lib" `
+            -DSQLite3_INCLUDE_DIR="$env:SQLITE_ROOT" `
+            -DSQLite3_LIBRARY="$env:SQLITE_ROOT\sqlite3.lib" `
             -DENABLE_POSIX_RUNTIME=OFF -DENABLE_KLEE_UCLIBC=OFF `
             -DENABLE_UNIT_TESTS=OFF -DENABLE_SYSTEM_TESTS=OFF
           if ($LASTEXITCODE -ne 0) { throw 'configuring KLEE failed' }
