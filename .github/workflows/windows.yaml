@@ -474,20 +474,6 @@ jobs:
 
       - name: Smoke test -- the server binary runs
         run: |
-          # Generation itself is not exercised here yet. Its compile steps now
-          # run as processes and its recipes are written in the shell that will
-          # read them, but the link step still goes through make.
-          #
-          # That one is not a translation job. The root module is linked twice:
-          # once without stubs, then again after the missing symbols have been
-          # stubbed, and the stub list reaches the second link as the make
-          # variable $(STUB_BITCODE_FILES), defined by a makefile the first pass
-          # writes. Running the link directly means materialising that list in
-          # the server and re-planning the second pass, not just spelling the
-          # recipe differently.
-          #
-          # Until then this checks what is true: the binary links, starts, and
-          # reports its interface.
           $utbot = Join-Path $env:GITHUB_WORKSPACE 'build\utbot.exe'
           $help = & $utbot --help 2>&1 | Out-String
           if ($LASTEXITCODE -ne 0) { throw "utbot --help failed ($LASTEXITCODE)" }
@@ -498,6 +484,90 @@ jobs:
             }
           }
           Write-Host 'utbot.exe starts and reports its interface'
+
+      - name: Smoke test -- generate tests
+        timeout-minutes: 45
+        run: |
+          # Generation drives no build tool now -- it compiles, archives and
+          # links by spawning the compiler itself -- so this is the first thing
+          # that exercises that end to end on Windows.
+          #
+          # A synthetic fixture, so the expected answer is known by
+          # construction: three branches, so at least three cases.
+          #
+          # Building and running what it generates is a separate matter and is
+          # not attempted here: the test makefiles it writes for the user are
+          # still makefiles, and driving those wants the same treatment the
+          # generation build just had.
+          $fixture = Join-Path $env:RUNNER_TEMP 'genfixture'
+          New-Item -ItemType Directory -Path (Join-Path $fixture 'src') -Force | Out-Null
+          @(
+            'int classify(int value) {',
+            '    if (value > 100) return 2;',
+            '    if (value > 10) return 1;',
+            '    return 0;',
+            '}'
+          ) | Set-Content -LiteralPath (Join-Path $fixture 'src\classify.c') -Encoding ascii
+          @('int doubled(int x) { return x * 2; }') |
+            Set-Content -LiteralPath (Join-Path $fixture 'src\util.c') -Encoding ascii
+
+          $build = Join-Path $fixture 'build'
+          New-Item -ItemType Directory -Path $build -Force | Out-Null
+          $bin = Join-Path $env:UTBOT_ALL 'install\bin'
+          $clang = Join-Path $bin 'clang.exe'
+          $ar = Join-Path $bin 'llvm-ar.exe'
+
+          # A compilation database by hand: Bear intercepts exec() and does not
+          # apply here, and CMake would be another moving part in a test of the
+          # server. Forward slashes throughout, since these strings are read
+          # back as paths rather than as PowerShell escapes.
+          $compile = @()
+          $link = @()
+          $objects = @()
+          foreach ($unit in @('classify', 'util')) {
+            $source = (Join-Path $fixture "src\$unit.c") -replace '\\', '/'
+            $object = (Join-Path $build "$unit.o") -replace '\\', '/'
+            & $clang -c -g -O0 $source -o $object
+            if ($LASTEXITCODE -ne 0) { throw "compiling $unit failed" }
+            $objects += $object
+            $compile += [ordered]@{
+              directory = ($build -replace '\\', '/')
+              command = "clang -c -g -O0 $source -o $object"
+              file = $source
+              output = $object
+            }
+          }
+          $archive = (Join-Path $build 'libfixture.a') -replace '\\', '/'
+          & $ar rcs $archive $objects
+          if ($LASTEXITCODE -ne 0) { throw 'archiving the fixture failed' }
+          $link += [ordered]@{
+            directory = ($build -replace '\\', '/')
+            command = "ar rcs $archive " + ($objects -join ' ')
+            files = $objects
+            output = $archive
+          }
+          ConvertTo-Json -Depth 5 -InputObject $compile |
+            Set-Content -LiteralPath (Join-Path $build 'compile_commands.json') -Encoding ascii
+          ConvertTo-Json -Depth 5 -InputObject $link |
+            Set-Content -LiteralPath (Join-Path $build 'link_commands.json') -Encoding ascii
+
+          $utbot = Join-Path $env:GITHUB_WORKSPACE 'build\utbot.exe'
+          & $utbot generate -p $fixture -b build -t tests --function-timeout 15 project
+          if ($LASTEXITCODE -ne 0) { throw "utbot generate failed ($LASTEXITCODE)" }
+
+          $generated = @(Get-ChildItem -LiteralPath $fixture -Recurse -Filter '*_test.cpp')
+          if (-not $generated) { throw 'no tests were generated' }
+          Write-Host "Generated: $($generated.Name -join ', ')"
+
+          $classify = $generated | Where-Object { $_.Name -like 'classify*' } | Select-Object -First 1
+          if (-not $classify) { throw 'no test file for classify' }
+          $body = Get-Content -Raw -LiteralPath $classify.FullName
+          $cases = ([regex]::Matches($body, 'TEST\(')).Count
+          Write-Host "classify test cases: $cases"
+          if ($cases -lt 3) {
+            Write-Host $body
+            throw "expected at least 3 cases for three branches, got $cases"
+          }
 
       - name: Package the portable distribution
         run: |
