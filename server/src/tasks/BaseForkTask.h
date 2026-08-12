@@ -5,7 +5,6 @@
 #include "utils/ExecutionResult.h"
 
 #include <protobuf/testgen.grpc.pb.h>
-#include <run_klee/run_klee.h>
 
 #include <fcntl.h>
 #include <sys/stat.h>

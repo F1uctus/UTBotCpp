@@ -148,7 +148,10 @@ file(GLOB ALL_PROTO_GENERATED_SOURCES
 
 include_directories("${CMAKE_CURRENT_BINARY_DIR}")
 
-find_package(run_klee REQUIRED)
+# KLEE is spawned as a process rather than linked in, so the run_klee package
+# that UnitTestBot's fork exports is no longer needed. That is what lets the
+# server build against a KLEE with no such library, and on a platform with no
+# fork() to call it from.
 
 option(ENABLE_PRECOMPILED_HEADERS "Enable precompiled headers" ON)
 
@@ -170,7 +173,6 @@ target_link_libraries(UTBotCppLib PUBLIC clangTooling clangBasic clangASTMatcher
         gRPC::grpc++
         protobuf::libprotobuf
         loguru
-        kleeRunner
         )
 if (ENABLE_PRECOMPILED_HEADERS)
     target_precompile_headers(UTBotCppLib PUBLIC pch.h)
