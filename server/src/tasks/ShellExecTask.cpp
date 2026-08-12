@@ -25,21 +25,9 @@ void ShellExecTask::initMessage() const {
     LOG_S(DEBUG) << "Execute: " << params.toString() << "\nfrom directory: " << workDir.string();
 }
 
-int ShellExecTask::childProcessJob() {
-    ExecUtils::toCArgumentsPtr(params.argv, params.envp, cargv, cenvp, true);
-    if (!chdir(workDir.string().c_str())) {
-        if (execvpe(params.executable.c_str(), cargv.data(), cenvp.data()) == -1) {
-            return -1;
-        }
-        return 0;
-    } else {
-        //here we write to cerr as it is loguru-indented in collectAndCleanup
-        std::cerr << "Failed to change working directory: " << LogUtils::errnoMessage() << " " << workDir.string() << '\n';
-        return -1;
-    }
+BaseForkTask::Spawn ShellExecTask::spawnDescription() const {
+    return { params.executable, params.argv, params.envp, workDir };
 }
-
-void ShellExecTask::waitAfterSignal(int signalId) const {}
 
 std::string ShellExecTask::collectAndCleanup() {
     std::ifstream logFile(logFilePath);
@@ -151,7 +139,7 @@ ShellExecTask::ShellExecTask(ExecutionParameters _params,
                              bool ignoreErrors,
                              const std::optional<std::chrono::seconds> &timeout)
     : BaseForkTask(
-          _params.executable, timeout, execLogPath, { SIGKILL }, redirectStderr, ignoreErrors),
+          _params.executable, timeout, execLogPath, redirectStderr, ignoreErrors),
       params(std::move(_params)), logOut(logOut) {
     workDir = fromDir.empty() ? fs::current_path() : fs::path(fromDir);
     for (const auto &var : ExecUtils::environAsVector()) {

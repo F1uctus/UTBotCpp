@@ -6,13 +6,40 @@
 
 #include <protobuf/testgen.grpc.pb.h>
 
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <sys/wait.h>
-#include <unistd.h>
+#include <chrono>
+#include <optional>
+#include <string>
+#include <vector>
 
+/**
+ * Runs one external program with a timeout, capturing its output to a file.
+ *
+ * The name is historical. On POSIX this forks and execs; Windows has no fork,
+ * so there the same description is handed to CreateProcess. That is why the
+ * task describes what to run rather than doing the running itself: a forked
+ * child can execute arbitrary code before the exec, and on Windows there is no
+ * such moment, so anything a subclass wants to arrange has to be expressible up
+ * front.
+ *
+ * The platform halves live in BaseForkTaskPosix.cpp and
+ * BaseForkTaskWindows.cpp. Both are compiled -- the sources are picked up by a
+ * glob -- and each is guarded so that only one contributes any code.
+ */
 class BaseForkTask {
 public:
+    /**
+     * Everything needed to start the program.
+     *
+     * envp entries are "NAME=VALUE". An empty workDir means the current
+     * directory.
+     */
+    struct Spawn {
+        std::string executable;
+        std::vector<std::string> argv;
+        std::vector<std::string> envp;
+        fs::path workDir;
+    };
+
     BaseForkTask() = delete;
     virtual ExecUtils::ExecutionResult run();
     /**
@@ -33,11 +60,18 @@ public:
      * @param exitCode - the task exit code.
      */
     static bool wasInterrupted(int exitCode);
+
+    /**
+     * Exit codes used to signal conditions the program itself never
+     * reports: a log file that could not be opened, and a run that was
+     * stopped rather than finished.
+     */
+    static const int LOG_FAIL_CODE = 8;
+    static const int TIMEOUT_CODE = 9;
 protected:
     explicit BaseForkTask(std::string processName,
                           const std::optional<std::chrono::seconds> &timeout,
                           fs::path logFilePath,
-                          std::vector<int> shutDownSignals,
                           bool redirectStderr,
                           bool ignoreErrors);
     virtual ~BaseForkTask() = default;
@@ -59,27 +93,13 @@ protected:
      */
     virtual void logFailMessage() const;
     /**
-     * @brief Triggers when the child process is stopped.
-     */
-    virtual void stopMessage(int status) const;
-    /**
      * @brief Triggers when the child process is killed.
      */
     virtual void killMessage(int status) const;
     /**
-     * @brief Triggers when the output of the child process
-     * is successfully redirected to log file.
-     */
-    virtual void redirectMessage() const;
-    /**
      * @brief Triggers on child process creation.
      */
     virtual void initMessage() const;
-
-    /**
-     * @brief Triggers after sending signal to child process.
-     */
-    virtual void waitAfterSignal(int signalId) const = 0;
 
     /**
      * @brief Reads the output file to std::string.
@@ -87,32 +107,15 @@ protected:
     virtual std::string collectAndCleanup() = 0;
 
     /**
-     * @brief The function that is invoked in the child process.
+     * @brief The program this task runs.
      */
-    virtual int childProcessJob() = 0;
+    virtual Spawn spawnDescription() const = 0;
 
     /**
-     * @brief Redirects child process stdout (and, optionally,
-     * stderr) to output file.
+     * @brief Builds the result, shared by both platforms.
      */
-    bool redirectOutput();
+    ExecUtils::ExecutionResult finish(int status);
 
-    /**
-     * @brief Log out if the process is running or has ended.
-     * @param pid - pid of the process to check.
-     */
-    static void checkForExist(pid_t pid);
-
-    /**
-     * @brief wait on pid and then proceed to kill it on timeout
-     * @return status of the finished process.
-     */
-    int waitForFinishedOrCancelled();
-
-    /**
-     * Pid of the child process, used to track its status.
-     */
-    pid_t pid;
     /**
      * Name of the binary running in the child process,
      * used for logging.
@@ -124,16 +127,10 @@ protected:
     fs::path logFilePath;
     /**
      * Timeout after which the task is automatically cancelled.
-     * Cancellation process consecutively sends shutDownSignals
-     * to the child process.
      * Set to std::nullopt if you do not want the process to be
      * cancellable.
      */
     const std::optional<std::chrono::seconds> timeout;
-    /**
-     * A sequence of signals sent to child process on cancellation.
-     */
-    const std::vector <int> shutDownSignals;
     /**
      * Should the process stderr be redirected to output file.
      */
@@ -150,18 +147,6 @@ protected:
      * Should output file be retained on exit code 0.
      */
     bool retainOutputFile = false;
-    /**
-     * Exit codes set by child process to indicate
-     * special errors.
-     */
-    static const int LOG_FAIL_CODE = 8;
-    static const int TIMEOUT_CODE = 9;
-    static const int SETPGID_FAIL_CODE = 10;
-
-    /**
-     * Throws if the watched child process is absent.
-     */
-    static void throwIfNoSuchProcess();
 };
 
 

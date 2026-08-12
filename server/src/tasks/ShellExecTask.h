@@ -141,12 +141,10 @@ private:
                            const std::optional<std::chrono::seconds> &timeout /* = std::nullopt*/);
 
     void initMessage() const override;
-    void waitAfterSignal(int signalId) const override;
 
     ExecutionParameters params;
-    std::vector <char*> cargv, cenvp;
     fs::path workDir;
-    int childProcessJob() override;
+    Spawn spawnDescription() const override;
     std::string collectAndCleanup() override;
     bool logOut;
 };
