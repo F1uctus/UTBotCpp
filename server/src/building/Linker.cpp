@@ -492,11 +492,11 @@ std::string getArchiveArgument(std::string const &argument,
     if (CollectionUtils::contains(linkUnitInfo.installedFiles, argument)) {
         return argument;
     }
-    if (argument == linkUnitInfo.getOutput()) {
-        return output;
-    }
-    if (argument == "-o") {
-        return argument;
+    // The output and its -o are dropped here and reinstated below, in the one
+    // place that knows where ar wants them. Leaving either in place named the
+    // archive twice, and ar reads the second occurrence as a member.
+    if (argument == linkUnitInfo.getOutput() || argument == "-o") {
+        return "";
     }
     if (StringUtils::startsWith(argument, "-")) {
         return "";
@@ -527,6 +527,20 @@ static void moveOutputOptionToBegin(std::vector<std::string> &arguments, fs::pat
     }
 }
 
+/// Removes the -o that getArchiveCommands leaves in place for LinkCommand's
+/// benefit. ar's grammar is `ar <operation><modifiers> <archive> <members>`,
+/// with the archive positional; GNU ar quietly read a stray -o as the 'o'
+/// modifier and ignored it for 'r', but llvm-ar checks that modifiers apply to
+/// the operation and refuses.
+///
+/// Called once nothing will call setOutput again, because that writes through
+/// an iterator whose position this shifts.
+static void dropArchiveOutputOption(std::vector<utbot::LinkCommand> &commands) {
+    for (auto &command : commands) {
+        command.erase("-o");
+    }
+}
+
 static std::vector<utbot::LinkCommand>
 getArchiveCommands(fs::path const &workingDir,
                    CollectionUtils::MapFileTo<fs::path> const &dependencies,
@@ -545,12 +559,31 @@ getArchiveCommands(fs::path const &workingDir,
             if (!hasArchiveOption) {
                 arguments.insert(arguments.begin(), "r");
             }
-            moveOutputOptionToBegin(arguments, output);
+            // ar's grammar is: ar <operation><modifiers> <archive> <members>.
+            // The archive is positional and must follow the operation, so it
+            // goes in here rather than through moveOutputOptionToBegin, which
+            // puts it at the very front.
+            //
+            // -o is inserted with it purely so LinkCommand can bind its output
+            // iterator to the element after it -- without one it takes the
+            // archive branch of initOutput, finds nothing that looks like a
+            // static library (a bitcode archive is named .bc), and ends up with
+            // a past-the-end iterator that setOutput then writes through.
+            arguments.insert(std::next(arguments.begin()), { "-o", output });
+
+            // Only now: this looks for -o and indexes two past it, so it has to
+            // run once the option is in place.
             moveKleeTemporaryFileArgumentToBegin(arguments);
 
             arguments.insert(arguments.begin(), { Paths::getAr() });
             utbot::LinkCommand result{ arguments, workingDir, shouldChangeDirectory };
             result.setOutput(output);
+
+            // -o stays for now. It is not part of ar's grammar and is removed
+            // by dropArchiveOutputOption before the command is rendered, but
+            // LinkCommand tracks its output as an iterator into the command
+            // line: removing an earlier element here would leave a later
+            // setOutput writing one place past the archive, over a member.
             return result;
         });
     return commands;
@@ -730,6 +763,7 @@ Linker::declareRootLibraryTarget(printer::DefaultMakefilePrinter &bitcodeLinkMak
     for (auto &archiveAction : archiveActions) {
         archiveAction.setOutput(output);
     }
+    dropArchiveOutputOption(archiveActions);
     CollectionUtils::extend(
         actions, CollectionUtils::transform(
                      archiveActions, std::bind(&utbot::LinkCommand::toStringWithChangingDirectory,
@@ -800,6 +834,7 @@ Linker::addLinkTargetRecursively(const fs::path &fileToBuild,
                 utbot::RunCommand removeAction =
                     utbot::RunCommand::forceRemoveFile(output, testGen.serverBuildDir, shouldChangeDirectory);
                 std::vector<std::string> actions = { removeAction.toStringWithChangingDirectory() };
+                dropArchiveOutputOption(archiveActions);
                 CollectionUtils::extend(
                     actions,
                     CollectionUtils::transform(
