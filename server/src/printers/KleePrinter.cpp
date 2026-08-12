@@ -24,6 +24,46 @@ using namespace types;
 using printer::KleePrinter;
 
 static const std::string KLEE_GLOBAL_VAR_H = "klee_global_var.h";
+/**
+ * Equality over representations, for a KLEE that cannot compare floats
+ * symbolically.
+ *
+ * Written as a byte loop rather than a cast through an integer of the same
+ * width so that it covers every floating-point type, long double included,
+ * without the printer having to know how wide each one is on the target.
+ *
+ * The loop accumulates a difference instead of returning early on the first
+ * mismatching byte, and that is essential rather than stylistic: an early
+ * return makes KLEE fork on each byte, and on the branch where the bytes
+ * differ the function returns a literal 0, so the klee_assume around it is
+ * provably false and the path dies. Accumulating keeps the whole comparison a
+ * single symbolic expression that the assume can constrain.
+ *
+ * The trip count is a sizeof, so the loop itself is concrete and unrolls.
+ *
+ * static inline so that a translation unit whose functions touch no floating
+ * point simply does not emit it.
+ */
+// A function rather than a namespace-scope constant: it is built from
+// PrinterUtils::BITS_EQUAL, which lives in another translation unit, and at
+// static-initialisation time that is still empty -- which yields a definition
+// with no function name at all.
+static const std::string &bitsEqualDeclaration() {
+    static const std::string declaration =
+            "static inline int " + PrinterUtils::BITS_EQUAL +
+            "(const void *lhs, const void *rhs, unsigned long size) {\n"
+            "    const unsigned char *l = (const unsigned char *)lhs;\n"
+            "    const unsigned char *r = (const unsigned char *)rhs;\n"
+            "    unsigned char difference = 0;\n"
+            "    unsigned long i;\n"
+            "    for (i = 0; i < size; i++) {\n"
+            "        difference |= (unsigned char)(l[i] ^ r[i]);\n"
+            "    }\n"
+            "    return difference == 0;\n"
+            "}\n";
+    return declaration;
+}
+
 static const std::string CALLOC_DECLARATION = "#ifndef calloc\n"
                                               "extern\n"
                                               "#ifdef __cplusplus\n"
@@ -163,6 +203,9 @@ fs::path KleePrinter::writeTmpKleeFile(
 
     strInclude("klee/klee.h") << printer::NL;
     ss << CALLOC_DECLARATION << printer::NL;
+    if (!KleeOptions::targetHasSymbolicFloatingPoint()) {
+        ss << bitsEqualDeclaration() << printer::NL;
+    }
     writeStubsForStructureFields(tests);
     writeAccessPrivateMacros(typesHandler, tests, false,
                              [methodFilter, onlyForOneClass, onlyForOneFunction, testedMethod, testedClass](

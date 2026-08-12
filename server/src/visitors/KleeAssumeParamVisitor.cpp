@@ -33,7 +33,7 @@ namespace visitor {
                                               const tests::AbstractValueView *view,
                                               const std::string &access,
                                               int depth) {
-      kleeAssume(PrinterUtils::getEqualString(name, PrinterUtils::fillVarName(access, outVariable)));
+      kleeAssume(equalityAssumption(type, name, PrinterUtils::fillVarName(access, outVariable)));
   }
 
   void KleeAssumeParamVisitor::visitPointer(const types::Type &type,

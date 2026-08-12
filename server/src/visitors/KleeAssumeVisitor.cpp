@@ -1,6 +1,7 @@
 #include "KleeAssumeVisitor.h"
 
 #include "KleeAssumeReturnValueVisitor.h"
+#include "utils/KleeOptions.h"
 #include "utils/PrinterUtils.h"
 
 namespace visitor {
@@ -24,5 +25,15 @@ namespace visitor {
 
     void KleeAssumeVisitor::kleeAssume(const std::string &assumption) {
         printer->strFunctionCall(PrinterUtils::KLEE_ASSUME, { assumption });
+    }
+
+    std::string KleeAssumeVisitor::equalityAssumption(const types::Type &type,
+                                                      const std::string &lhs,
+                                                      const std::string &rhs) {
+        if (types::TypesHandler::isFloatingPointType(type) &&
+            !KleeOptions::targetHasSymbolicFloatingPoint()) {
+            return PrinterUtils::getBitsEqualString(lhs, rhs);
+        }
+        return PrinterUtils::getEqualString(lhs, rhs);
     }
 }

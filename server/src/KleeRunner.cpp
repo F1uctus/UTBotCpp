@@ -22,6 +22,44 @@
 using namespace tests;
 
 namespace {
+    /**
+     * How much time KLEE is allowed on top of its own budget.
+     *
+     * --max-time bounds symbolic execution, and KLEE starts that clock only
+     * once it has loaded and prepared the module. On a whole-project module the
+     * preparation dominates: on a 129MB one, 70 seconds of a 78-second
+     * --max-time=8s run happened before the clock started.
+     *
+     * Killing the process at the per-function budget therefore kills every run
+     * during loading, before a single instruction is executed -- and an empty
+     * output directory is indistinguishable from a function with no reachable
+     * paths, so the run reports nothing rather than failing.
+     *
+     * The external kill is a backstop for a KLEE that has stopped honouring its
+     * own timer, not the thing that enforces the budget; --max-time enforces
+     * that, and does it better, because a KLEE that reaches it halts and writes
+     * the test cases for its remaining states while a killed one writes
+     * nothing. So this sits deliberately far above any per-function budget,
+     * sized for loading a large module rather than for executing one.
+     */
+    constexpr std::chrono::seconds kleeLoadingAllowance{600};
+
+    /**
+     * The memory KLEE is allowed, in MB.
+     *
+     * Sized for the module rather than for the exploration: UTBot links the
+     * whole project into one module and runs KLEE once per method, so the
+     * baseline every run starts from is the whole project. KLEE's 2000MB
+     * default is below that baseline on a large project, so the initial state
+     * is killed before it executes anything.
+     *
+     * Deliberately a plain number rather than a fraction of the machine's RAM:
+     * one KLEE runs at a time, and a value that moves with the host would make
+     * a run that succeeds on one machine fail on another for reasons nothing
+     * reports.
+     */
+    constexpr unsigned maxMemoryMegabytes = 8192;
+
     void clearUnusedData(const fs::path &kleeDir) {
         fs::remove(kleeDir / "assembly.ll");
         fs::remove(kleeDir / "run.istats");
@@ -239,6 +277,13 @@ KleeRunner::createKleeParams(const tests::TestMethod &testMethod,
         "--skip-not-symbolic-objects",
         "--use-tbaa",
         "--ubsan-runtime",
+        // KLEE's default cap is 2000MB, and it counts the deterministic
+        // allocator's usage as well as its own heap. A whole-project module is
+        // over that before any exploration happens -- on T1100 the initial
+        // state was killed during setup, which is reported as a run that found
+        // nothing rather than as a failure. This has to be the analysis budget,
+        // not the module's baseline.
+        "--max-memory=" + std::to_string(maxMemoryMegabytes),
         "--output-dir=" + kleeOut.string()
     };
     if (Paths::isCXXFile(testMethod.sourceFilePath)) {
@@ -310,11 +355,19 @@ KleeRunner::runKleeProcess(const std::vector<std::string> &argvData,
 
     LOG_S(DEBUG) << "Klee command: " << StringUtils::joinWith(adapted, " ");
 
+    // The budget itself is already on the command line as --max-time; see
+    // kleeLoadingAllowance for why killing the process at that same moment
+    // would end every run before it executed anything.
+    std::optional<std::chrono::seconds> hardTimeout;
+    if (timeout.has_value()) {
+        hardTimeout = *timeout + kleeLoadingAllowance;
+    }
+
     auto result = ShellExecTask::runShellCommandTask(
         ShellExecTask::ExecutionParameters(executable, arguments),
         /*fromDir=*/"", projectContext.projectName,
         /*redirectStderr=*/true, /*logOut=*/false, /*ignoreErrors=*/true,
-        timeout);
+        hardTimeout);
 
     // Errors are ignored because a run that times out or terminates a state is
     // still useful, but a KLEE that refused the command line is not: it exits

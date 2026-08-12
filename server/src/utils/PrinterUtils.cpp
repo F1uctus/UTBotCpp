@@ -152,6 +152,13 @@ namespace PrinterUtils {
         return StringUtils::stringFormat("%s == %s", lhs, rhs);
     }
 
+    const std::string BITS_EQUAL = "utbot_bits_equal";
+
+    std::string getBitsEqualString(const std::string& lhs, const std::string& rhs) {
+        return StringUtils::stringFormat("%s(&(%s), &(%s), sizeof(%s))",
+                                         BITS_EQUAL, lhs, rhs, lhs);
+    }
+
     std::string getDereferencePointer(const std::string& name, const size_t depth) {
         return StringUtils::stringFormat("(%s%s)", StringUtils::repeat("*", depth), name);
     }

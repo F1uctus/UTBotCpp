@@ -21,6 +21,22 @@ namespace visitor {
                           int depth) override;
 
         void kleeAssume(std::string const &assumption);
+
+        /**
+         * Builds an equality assumption the target KLEE can actually decide.
+         *
+         * For a type it compares symbolically this is plain ==. For floating
+         * point on a KLEE without symbolic floating point it is an equality of
+         * representations, because == would be concretized into a constant
+         * before the solver saw it -- and a wrong constant kills the path with
+         * "invalid klee_assume call (provably false)" rather than merely losing
+         * precision.
+         *
+         * Both operands must be lvalues.
+         */
+        [[nodiscard]] static std::string equalityAssumption(const types::Type &type,
+                                                            const std::string &lhs,
+                                                            const std::string &rhs);
     };
 }
 
