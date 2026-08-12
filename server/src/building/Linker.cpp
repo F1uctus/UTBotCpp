@@ -573,8 +573,15 @@ getArchiveCommands(fs::path const &workingDir,
 ///   -plugin-opt emit-llvm, -relocatable   llvm-link only ever emits bitcode
 ///   --whole-archive                       what llvm-link does with an archive
 ///                                         by default
-///   (archive without --whole-archive)     --only-needed
 ///   --allow-multiple-definition           no equivalent; see below
+///
+/// The stub and non-stub paths used to differ -- the former wrapped each
+/// dependency in --whole-archive, the latter let gold take only the members it
+/// needed. Both now take everything, because llvm-link's --only-needed is not
+/// the same switch: it applies to every input rather than only to archives, and
+/// would drop code from the plain bitcode objects that make up most of the
+/// link. Taking everything is the superset, and costs module size rather than
+/// correctness.
 ///
 /// There is deliberately nothing standing in for --allow-multiple-definition.
 /// Under gold it meant "keep the first definition and ignore the rest", which

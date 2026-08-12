@@ -33,3 +33,7 @@
 
 # CLion/IDEA files
 .idea
+# A local layout of the bundled toolchain, built from symlinks to whatever
+# clang, llvm-link and klee this machine has. Absolute paths, so it is only
+# meaningful here.
+submodules/install/
