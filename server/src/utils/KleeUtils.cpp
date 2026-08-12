@@ -7,8 +7,6 @@
 
 #include "loguru.h"
 
-#include <run_klee/run_klee.h>
-
 #include <fcntl.h>
 #include <fstream>
 #include <future>

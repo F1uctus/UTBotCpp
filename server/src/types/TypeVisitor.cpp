@@ -8,7 +8,7 @@
 
 #include <llvm/Support/Casting.h>
 
-bool TypeVisitor::TraverseType(clang::QualType type) {
+bool TypeVisitor::TraverseType(clang::QualType type, bool traverseQualifier) {
     clang::QualType canonicalType = type.getCanonicalType();
     const auto curType = canonicalType.getNonReferenceType().getUnqualifiedType();
     const auto curTypeString = curType.getAsString();
@@ -42,7 +42,7 @@ bool TypeVisitor::TraverseType(clang::QualType type) {
             kinds.push_back(std::make_shared<SimpleType>(id, unnamed, constQualified, referenceType));
         }
     }
-    RecursiveASTVisitor<TypeVisitor>::TraverseType(curType);
+    RecursiveASTVisitor<TypeVisitor>::TraverseType(curType, traverseQualifier);
     return true;
 }
 

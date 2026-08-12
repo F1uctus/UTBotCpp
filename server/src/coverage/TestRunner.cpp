@@ -236,7 +236,9 @@ testsgen::TestResultObject TestRunner::runTest(const BuildRunCommand &command,
     }
     try {
         nlohmann::json gtestResultsJson = JsonUtils::getJsonFromFile(Paths::getGTestResultsJsonPath(projectContext));
-        if (!google::protobuf::util::TimeUtil::FromString(gtestResultsJson["time"], testRes.mutable_executiontime())) {
+        if (!google::protobuf::util::TimeUtil::FromString(
+                gtestResultsJson["time"].get<std::string>(),
+                testRes.mutable_executiontime())) {
             LOG_S(WARNING) << "Cannot parse duration of test execution";
         }
         if (gtestResultsJson["failures"] != 0) {

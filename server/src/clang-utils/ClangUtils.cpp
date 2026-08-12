@@ -40,7 +40,7 @@ namespace ClangUtils {
     getReturnType(const clang::FunctionDecl *FS, const clang::ast_matchers::MatchFinder::MatchResult &Result) {
         clang::QualType realReturnType = FS->getReturnType().getCanonicalType();
         if (const auto *CS = getConstructor(Result)) {
-            realReturnType = CS->getThisObjectType();
+            realReturnType = CS->getFunctionObjectParameterType();
         }
         return realReturnType;
     }
@@ -50,12 +50,19 @@ namespace ClangUtils {
         if (auto qualifier = FS->getQualifier()) {
             llvm::raw_string_ostream OS(qualName);
             if (llvm::dyn_cast<clang::CXXConstructorDecl>(FS)) {
-                qualifier = qualifier->getPrefix();
-                if (qualifier) {
-                    qualifier->print(OS, FS->getASTContext().getPrintingPolicy());
+                // A constructor's qualifier ends in the class itself, which is
+                // already the call's name, so only what precedes it is wanted.
+                // Since Clang 22 the prefix is reachable only for a namespace
+                // qualifier; a type qualifier keeps its own inside the type,
+                // and printing nothing is the right answer there.
+                if (qualifier.getKind() ==
+                    clang::NestedNameSpecifier::Kind::Namespace) {
+                    if (auto prefix = qualifier.getAsNamespaceAndPrefix().Prefix) {
+                        prefix.print(OS, FS->getASTContext().getPrintingPolicy());
+                    }
                 }
             } else if (!llvm::dyn_cast<clang::CXXMethodDecl>(FS)) {
-                qualifier->print(OS, FS->getASTContext().getPrintingPolicy());
+                qualifier.print(OS, FS->getASTContext().getPrintingPolicy());
             }
             OS.flush();
         }
