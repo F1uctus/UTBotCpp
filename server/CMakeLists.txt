@@ -76,7 +76,15 @@ else ()
     add_compile_options(-fexceptions -frtti)
 endif ()
 
-add_definitions(-DUTBOT_DEV_ROOT_DIR="$ENV{UTBOT_ALL}")
+# Where a development build looks for the tools it spawns. isDevEnvironment()
+# tests whether this path exists, so a distribution has to be built with it
+# empty: otherwise the binary prefers a path from the machine that built it,
+# and only falls back to its own location on machines where that path happens
+# not to exist -- which is every machine except the build one, so the mistake
+# does not show up until it does.
+set(UTBOT_DEV_ROOT_DIR "$ENV{UTBOT_ALL}" CACHE STRING
+    "Root the server resolves its tools against; empty for a relocatable build")
+add_definitions(-DUTBOT_DEV_ROOT_DIR="${UTBOT_DEV_ROOT_DIR}")
 
 set(GRPC_PATH $ENV{GRPC_PATH})
 set(CMAKE_PREFIX_PATH ${GRPC_PATH}/lib/cmake/grpc ${GRPC_PATH}/lib/cmake/protobuf)

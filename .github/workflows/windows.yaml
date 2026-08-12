@@ -273,7 +273,8 @@ jobs:
             -DSQLite3_INCLUDE_DIR="$env:SQLITE_ROOT" `
             -DSQLite3_LIBRARY="$env:SQLITE_ROOT\sqlite3.lib" `
             -DENABLE_POSIX_RUNTIME=OFF -DENABLE_KLEE_UCLIBC=OFF `
-            -DENABLE_UNIT_TESTS=OFF -DENABLE_SYSTEM_TESTS=OFF
+            -DENABLE_UNIT_TESTS=OFF `
+            -DUTBOT_DEV_ROOT_DIR= -DENABLE_SYSTEM_TESTS=OFF
           if ($LASTEXITCODE -ne 0) { throw 'configuring KLEE failed' }
           cmake --build $build --target install
           if ($LASTEXITCODE -ne 0) { throw 'building KLEE failed' }
