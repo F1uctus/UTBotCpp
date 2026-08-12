@@ -62,7 +62,7 @@ namespace visitor {
                                                       const tests::AbstractValueView *view,
                                                       const std::string &access,
                                                       int depth) {
-        std::string assumption = PrinterUtils::getEqualString(getDecorateTmpVarName(access),
+        std::string assumption = equalityAssumption(type, getDecorateTmpVarName(access),
                                              PrinterUtils::fillVarName(access, KleeUtils::RESULT_VARIABLE_NAME));
         kleeAssumeWithNullCheck(assumption);
     }

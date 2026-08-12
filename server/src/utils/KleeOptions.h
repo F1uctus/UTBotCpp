@@ -41,6 +41,20 @@ namespace KleeOptions {
      * live there and calling them without it fails the run outright.
      */
     bool targetHasPosixRuntime();
+
+    /**
+     * True if the target KLEE reasons about floating point symbolically.
+     *
+     * Upstream does not: Executor.cpp turns both operands of an FCmp into
+     * constants and compares those, so a comparison between two symbolic floats
+     * is decided before the solver sees it. UnitTestBot's fork adds this behind
+     * --fp-runtime.
+     *
+     * It matters to the generated harness rather than only to the command line,
+     * because the post-state of a float has to be captured by a comparison that
+     * the solver can actually reason about.
+     */
+    bool targetHasSymbolicFloatingPoint();
 }
 
 #endif // UNITTESTBOT_KLEEOPTIONS_H

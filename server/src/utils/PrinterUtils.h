@@ -99,6 +99,17 @@ namespace PrinterUtils {
     std::string getEnumReturnMangledTypeName(const std::string& methodName);
 
     std::string getEqualString(const std::string &lhs, const std::string &rhs);
+
+    /**
+     * An equality test written over the representations rather than the values,
+     * for types the target KLEE cannot compare symbolically.
+     *
+     * Both operands have to be lvalues, since their addresses are taken.
+     */
+    std::string getBitsEqualString(const std::string &lhs, const std::string &rhs);
+
+    /** Name of the helper getBitsEqualString calls; defined by BITS_EQUAL_DECLARATION. */
+    extern const std::string BITS_EQUAL;
     std::string getDereferencePointer(const std::string &name, const size_t depth);
     std::string getExpectedVarName(const std::string &varName);
 

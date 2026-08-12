@@ -91,6 +91,13 @@ bool KleeOptions::targetHasPosixRuntime() {
     return false;
 }
 
+bool KleeOptions::targetHasSymbolicFloatingPoint() {
+    // Verified against the KLEE this build targets: Instruction::FCmp calls
+    // toConstant() on both operands unconditionally, and there is no build
+    // option that changes it.
+    return false;
+}
+
 bool KleeOptions::targetHasUnitTestBotExtensions() {
     // This build is compiled against upstream-derived KLEE headers. If the
     // server is ever pointed back at the fork, this is the single place that
