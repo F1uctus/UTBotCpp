@@ -31,6 +31,16 @@ namespace KleeOptions {
      * extensions, in which case nothing is dropped.
      */
     bool targetHasUnitTestBotExtensions();
+
+    /**
+     * True if the target KLEE builds the POSIX runtime.
+     *
+     * It models a POSIX environment -- stdin, a filesystem, argv -- and is
+     * POSIX by construction, so the Windows build does not include it. The
+     * generated harness has to know, because klee_init_env and the stdin check
+     * live there and calling them without it fails the run outright.
+     */
+    bool targetHasPosixRuntime();
 }
 
 #endif // UNITTESTBOT_KLEEOPTIONS_H

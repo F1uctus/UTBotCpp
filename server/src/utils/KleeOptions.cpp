@@ -3,6 +3,7 @@
 #include "loguru.h"
 
 #include <algorithm>
+#include <map>
 #include <set>
 #include <unordered_set>
 
@@ -37,6 +38,32 @@ const std::set<std::string> forkOnlyOptions = {
     "--use-cov-check",
     "--interactive",
     "--process-number",
+    // The fork's own multi-entry-point and per-function timeout mechanism.
+    // Upstream has neither; the timeout is passed as --max-time instead, and
+    // each entry point is a separate run.
+    "--entrypoints-file",
+    "--timeout-per-function",
+};
+
+/**
+ * Options the Windows KLEE does not have because the POSIX runtime is not part
+ * of it -- it models a POSIX environment and is POSIX by construction, so that
+ * build deliberately excludes it.
+ *
+ * The value is how many following arguments belong to the option and have to go
+ * with it: --sym-stdin takes a size, --sym-files a count and a size. Dropping
+ * the flag but leaving its numbers behind would hand KLEE a bare "4096", which
+ * it reads as the bitcode file to run.
+ *
+ * These model stdin and a filesystem for the code under test. A firmware
+ * function has neither, so nothing is lost here that the analysis wanted.
+ */
+const std::map<std::string, unsigned> posixOptions = {
+    {"--posix-runtime", 0},
+    {"--sym-stdin", 1},
+    {"--sym-files", 2},
+    {"--sym-arg", 1},
+    {"--sym-args", 3},
 };
 
 /**
@@ -58,6 +85,11 @@ std::string optionName(const std::string &argument) {
 }
 
 } // namespace
+
+bool KleeOptions::targetHasPosixRuntime() {
+    // The Windows KLEE excludes it deliberately; this build targets that KLEE.
+    return false;
+}
 
 bool KleeOptions::targetHasUnitTestBotExtensions() {
     // This build is compiled against upstream-derived KLEE headers. If the
@@ -94,6 +126,21 @@ std::vector<std::string> KleeOptions::adapt(const std::vector<std::string> &argv
                 LOG_S(WARNING)
                     << name << " is not available in this KLEE and is being "
                     << "dropped; results will be narrower than the fork's.";
+            }
+            continue;
+        }
+
+        auto posix = posixOptions.find(name);
+        if (posix != posixOptions.end()) {
+            if (alreadyReported.insert(name).second) {
+                LOG_S(WARNING)
+                    << name << " needs the POSIX runtime, which this KLEE does "
+                    << "not build; dropping it and its arguments.";
+            }
+            // Only skip the values when they are separate arguments;
+            // --sym-stdin=4096 carries its own.
+            if (argument == name) {
+                i += posix->second;
             }
             continue;
         }

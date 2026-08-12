@@ -37,6 +37,11 @@ namespace Paths {
 
     fs::path getLLVMcov();
 
+    /// The bitcode linker. Replaces ld.gold with the LLVMgold plugin, which
+    /// exists only on Linux and only when binutils was built with plugin
+    /// support -- llvm-link is part of LLVM itself and works everywhere.
+    fs::path getLLVMLink();
+
     fs::path getLLVMgold();
 
     fs::path getAr();

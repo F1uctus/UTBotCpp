@@ -248,6 +248,18 @@ KleeRunner::createKleeParams(const tests::TestMethod &testMethod,
     if (settingsContext.useDeterministicSearcher) {
         argvData.emplace_back("--search=dfs");
     }
+    if (settingsContext.timeoutPerFunction.has_value()) {
+        // Tell KLEE the budget rather than only killing it when the budget
+        // runs out. The fork's --timeout-per-function did this; upstream
+        // spells it --max-time.
+        //
+        // It matters for more than tidiness: a KLEE that is signalled halts,
+        // dumps its remaining states and writes their test cases, where one
+        // that is killed writes nothing at all. Without this every function
+        // that used its whole budget produced an empty result.
+        argvData.emplace_back(
+            "--max-time=" + std::to_string(settingsContext.timeoutPerFunction->count()) + "s");
+    }
     if (testMethod.is32bits) {
         // 32bit project
         argvData.emplace_back("--allocate-determ-size=" + std::to_string(1));
@@ -287,11 +299,21 @@ KleeRunner::runKleeProcess(const std::vector<std::string> &argvData,
 
     LOG_S(DEBUG) << "Klee command: " << StringUtils::joinWith(adapted, " ");
 
-    return ShellExecTask::runShellCommandTask(
+    auto result = ShellExecTask::runShellCommandTask(
         ShellExecTask::ExecutionParameters(executable, arguments),
         /*fromDir=*/"", projectContext.projectName,
         /*redirectStderr=*/true, /*logOut=*/false, /*ignoreErrors=*/true,
         timeout);
+
+    // Errors are ignored because a run that times out or terminates a state is
+    // still useful, but a KLEE that refused the command line is not: it exits
+    // before doing anything and leaves no output, which otherwise looks exactly
+    // like a run that simply found nothing.
+    if (result.status != 0 && !result.output.empty()) {
+        LOG_S(WARNING) << "klee exited with " << result.status << ": "
+                       << result.output;
+    }
+    return result;
 }
 
 void KleeRunner::processBatchWithoutInteractive(const std::vector<tests::TestMethod> &testMethods,
