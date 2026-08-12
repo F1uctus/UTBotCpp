@@ -1,6 +1,7 @@
 #include "HeaderPrinter.h"
 
 #include "utils/FileSystemUtils.h"
+#include "utils/KleeOptions.h"
 
 #include <fstream>
 
@@ -9,10 +10,18 @@ namespace printer {
                               const fs::path &sourceFilePath,
                               std::string &headerCode) {
         processHeader(Include(true, "cstring"));
-        processHeader(Include(true, "unistd.h"));
+        // unistd.h and the stdin redirection below are only reachable
+        // through --sym-stdin, which needs the POSIX runtime. Emitting
+        // them regardless makes the generated header unbuildable on a
+        // platform that has neither.
+        if (KleeOptions::targetHasPosixRuntime()) {
+            processHeader(Include(true, "unistd.h"));
+        }
         processHeader(Include(true, "stdio.h"));
         ss << printer::NL;
-        ss << PrinterUtils::redirectStdin << printer::NL;
+        if (KleeOptions::targetHasPosixRuntime()) {
+            ss << PrinterUtils::redirectStdin << printer::NL;
+        }
         ss << PrinterUtils::writeToFile << printer::NL;
         ss << PrinterUtils::fromBytes << printer::NL;
         ss << PrinterUtils::constCast;

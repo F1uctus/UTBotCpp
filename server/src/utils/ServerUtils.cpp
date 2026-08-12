@@ -3,7 +3,9 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#ifndef _WIN32
 #include <unistd.h>
+#endif
 
 #include "FileSystemUtils.h"
 #include "LogUtils.h"

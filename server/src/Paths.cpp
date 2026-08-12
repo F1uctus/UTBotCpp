@@ -6,8 +6,12 @@
 
 #include "loguru.h"
 
+#include <stdexcept>
+
+#ifndef _WIN32
 #include <pwd.h>
 #include <unistd.h>
+#endif
 
 namespace Paths {
     bool testInputFile(const std::string &fileName) {
@@ -15,10 +19,21 @@ namespace Paths {
     }
 
     static fs::path getHomeDir() {
-        const char *homeDir;
-        if ((homeDir = getenv("HOME")) == nullptr) {
+        // Windows has no HOME and no password database; USERPROFILE is what
+        // the shell and every other tool there use.
+        const char *homeDir = getenv("HOME");
+#ifdef _WIN32
+        if (homeDir == nullptr) {
+            homeDir = getenv("USERPROFILE");
+        }
+        if (homeDir == nullptr) {
+            throw std::runtime_error("Neither HOME nor USERPROFILE is set");
+        }
+#else
+        if (homeDir == nullptr) {
             homeDir = getpwuid(getuid())->pw_dir;
         }
+#endif
         return fs::canonical(fs::path(homeDir));
     }
 
