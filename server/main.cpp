@@ -3,6 +3,8 @@
 
 #include "loguru.h"
 
+#include <grpc/grpc.h>
+
 #include <llvm/Support/Signals.h>
 
 #include <cstdlib>
@@ -10,6 +12,16 @@
 
 int main(int argc, char **argv) {
     setenv("GRPC_ENABLE_FORK_SUPPORT", "1", 1);
+    // BaseForkTask calls grpc_prefork/grpc_postfork around every fork so that
+    // gRPC's internal state survives it. Those handlers are only registered by
+    // grpc_init, which in server mode the server does -- but the CLI starts no
+    // server, so grpc_prefork dispatched through a null pointer and the process
+    // died with a bare SIGSEGV before generating anything.
+    //
+    // grpc_init is refcounted and cheap, and this is what gRPC asks of any
+    // process that calls its fork API. It becomes unnecessary once the tasks
+    // spawn processes rather than forking.
+    grpc_init();
     llvm::sys::PrintStackTraceOnErrorSignal(argv[0]);
     CLI::App app{ PROJECT_DESCRIPTION, PROJECT_NAME };
     std::atexit([]() { std::cout << rang::style::reset; });

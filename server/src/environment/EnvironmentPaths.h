@@ -18,6 +18,11 @@ namespace Paths {
 
     fs::path getMake();
 
+    /// Where klee/klee.h lives. The generated harnesses include it, so the
+    /// path has to be given to the compiler explicitly rather than relied on
+    /// to be somewhere the toolchain already looks.
+    fs::path getKleeIncludeDir();
+
     fs::path getUTBotClang();
     
     fs::path getUTBotClangPP();
