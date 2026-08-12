@@ -29,7 +29,6 @@ env:
   # the same bitcode.
   LLVM_VERSION: 22.1.8
   Z3_VERSION: 4.16.0
-  VCPKG_COMMIT: 2025.01.13
 
 defaults:
   run:
@@ -318,29 +317,42 @@ jobs:
             Write-Host "Copied the resource directory to $to"
           }
 
-      - name: Cache vcpkg
+      - name: Cache the vcpkg packages
         id: vcpkg-cache
         uses: actions/cache@v4
         with:
-          path: ${{ github.workspace }}\..\deps\vcpkg
-          key: vcpkg-${{ env.VCPKG_COMMIT }}-grpc-protobuf-v1
+          # The runner image ships vcpkg already, so only what gets built into
+          # it is worth carrying between runs.
+          path: ${{ github.workspace }}\..\deps\vcpkg-installed
+          key: vcpkg-grpc-protobuf-x64-windows-v2
 
       - name: Build gRPC and protobuf
-        if: steps.vcpkg-cache.outputs.cache-hit != 'true'
         timeout-minutes: 120
         run: |
+          # The image's vcpkg rather than a fresh clone: cloning means
+          # bootstrapping, and bootstrapping downloads vcpkg.exe, which is one
+          # more network fetch to fail on -- it already has.
+          #
           # gRPC has no binary distribution for MSVC, so it is built once and
-          # cached. This is the long pole of a cold run by a wide margin.
+          # the installed tree is cached. This is the long pole of a cold run.
           $deps = Join-Path (Split-Path -Parent $env:GITHUB_WORKSPACE) 'deps'
-          $vcpkg = Join-Path $deps 'vcpkg'
-          git clone --depth 1 --branch $env:VCPKG_COMMIT `
-            https://github.com/microsoft/vcpkg.git $vcpkg
-          if ($LASTEXITCODE -ne 0) { throw 'cloning vcpkg failed' }
-          & (Join-Path $vcpkg 'bootstrap-vcpkg.bat') -disableMetrics
-          if ($LASTEXITCODE -ne 0) { throw 'bootstrapping vcpkg failed' }
-          & (Join-Path $vcpkg 'vcpkg.exe') install `
-            grpc:x64-windows protobuf:x64-windows
-          if ($LASTEXITCODE -ne 0) { throw 'installing grpc failed' }
+          $cached = Join-Path $deps 'vcpkg-installed'
+          $vcpkg = $env:VCPKG_INSTALLATION_ROOT
+          if (-not $vcpkg -or -not (Test-Path -LiteralPath $vcpkg)) {
+            throw "no vcpkg on this image (VCPKG_INSTALLATION_ROOT=$vcpkg)"
+          }
+          Write-Host "Using vcpkg at $vcpkg"
+
+          if (Test-Path -LiteralPath (Join-Path $cached 'x64-windows')) {
+            Write-Host 'Restoring the cached packages'
+            Copy-Item -Recurse -Force (Join-Path $cached '*') (Join-Path $vcpkg 'installed')
+          } else {
+            & (Join-Path $vcpkg 'vcpkg.exe') install grpc:x64-windows protobuf:x64-windows
+            if ($LASTEXITCODE -ne 0) { throw 'installing grpc failed' }
+            New-Item -ItemType Directory -Path $cached -Force | Out-Null
+            Copy-Item -Recurse -Force (Join-Path $vcpkg 'installed\*') $cached
+          }
+          "VCPKG_ROOT_DIR=$vcpkg" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: Fetch CLI11
         run: |
@@ -362,8 +374,7 @@ jobs:
 
       - name: Configure
         run: |
-          $deps = Join-Path (Split-Path -Parent $env:GITHUB_WORKSPACE) 'deps'
-          $vcpkg = Join-Path $deps 'vcpkg'
+          $vcpkg = $env:VCPKG_ROOT_DIR
           cmake -S server -B build -G Ninja `
             -DCMAKE_BUILD_TYPE=Release `
             -DCMAKE_TOOLCHAIN_FILE="$vcpkg\scripts\buildsystems\vcpkg.cmake" `
@@ -473,7 +484,7 @@ jobs:
           # Runtime DLLs. The server itself is /MT, but the vcpkg gRPC and
           # protobuf builds are shared, and Z3 is shipped as a DLL.
           $deps = Join-Path (Split-Path -Parent $env:GITHUB_WORKSPACE) 'deps'
-          foreach ($dll in @(Get-ChildItem -LiteralPath "$deps\vcpkg\installed\x64-windows\bin" `
+          foreach ($dll in @(Get-ChildItem -LiteralPath "$env:VCPKG_ROOT_DIR\installed\x64-windows\bin" `
                                -Filter '*.dll' -ErrorAction SilentlyContinue)) {
             Copy-Item -LiteralPath $dll.FullName -Destination (Join-Path $stage 'bin') -Force
           }
