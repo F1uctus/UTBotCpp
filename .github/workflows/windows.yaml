@@ -274,7 +274,7 @@ jobs:
             -DSQLite3_LIBRARY="$env:SQLITE_ROOT\sqlite3.lib" `
             -DENABLE_POSIX_RUNTIME=OFF -DENABLE_KLEE_UCLIBC=OFF `
             -DENABLE_UNIT_TESTS=OFF `
-            -DUTBOT_DEV_ROOT_DIR= -DENABLE_SYSTEM_TESTS=OFF
+            -DENABLE_SYSTEM_TESTS=OFF
           if ($LASTEXITCODE -ne 0) { throw 'configuring KLEE failed' }
           cmake --build $build --target install
           if ($LASTEXITCODE -ne 0) { throw 'building KLEE failed' }
@@ -408,7 +408,8 @@ jobs:
             -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded `
             -DLLVM_DIR="$env:LLVM_ROOT\lib\cmake\llvm" `
             -DClang_DIR="$env:LLVM_ROOT\lib\cmake\clang" `
-            -DENABLE_UNIT_TESTS=OFF
+            -DENABLE_UNIT_TESTS=OFF `
+            -DUTBOT_DEV_ROOT_DIR=
           if ($LASTEXITCODE -ne 0) { throw 'configuring the server failed' }
 
       - name: Build
