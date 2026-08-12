@@ -187,8 +187,9 @@ static void processMethod(MethodKtests &ktestChunk,
             } else if (Paths::hasInternalError(path)) {
                 hasError = true;
             } else {
+                const std::string ktestPath = path.string();
                 std::unique_ptr<KTest, decltype(&kTest_free)> ktestData{
-                    kTest_fromFile(path.c_str()), kTest_free
+                    kTest_fromFile(ktestPath.c_str()), kTest_free
                 };
                 if (ktestData == nullptr) {
                     LOG_S(WARNING) << "Unable to open .ktest file";

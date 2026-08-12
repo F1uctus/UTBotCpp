@@ -1,5 +1,7 @@
 #include "ExecUtils.h"
 
+#include <cstdlib>
+
 namespace ExecUtils {
     void throwIfCancelled() {
         auto context = RequestEnvironment::getServerContext();
@@ -29,7 +31,13 @@ namespace ExecUtils {
     std::vector<std::string> environAsVector() {
         static std::vector<std::string> res;
         if (res.empty()) {
+            // The MSVC runtime spells the process environment _environ; environ
+            // is the POSIX name and is not declared there.
+#ifdef _WIN32
+            char **env = _environ;
+#else
             char **env = environ;
+#endif
             for (int i = 0; env[i]; i++) {
                 res.emplace_back(env[i]);
             }

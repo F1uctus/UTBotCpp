@@ -131,7 +131,7 @@ void TestsPrinter::printFinalCodeAndAlterJson(Tests &tests) {
                         }
                         std::stringstream ssFromTestCallInfo;
                         ssFromTestCallInfo
-                          << sarif::TEST_FILE_KEY << ":" << tests.testSourceFilePath.c_str() << std::endl
+                          << sarif::TEST_FILE_KEY << ":" << tests.testSourceFilePath.string() << std::endl
                           << sarif::TEST_LINE_KEY << ":" << line_count << std::endl
                           << sarif::TEST_NAME_KEY << ":" << testCase.suiteName
                                                          << "."

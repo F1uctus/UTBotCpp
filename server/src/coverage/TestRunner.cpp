@@ -98,7 +98,7 @@ std::vector<UnitTest> TestRunner::getTestsToLaunch() {
                         }
                         const auto &testFilePath = directoryEntry.path();
                         if (testFilePath.extension() == Paths::CXX_EXTENSION &&
-                            StringUtils::endsWith(testFilePath.stem().c_str(), Paths::TEST_SUFFIX)) {
+                            StringUtils::endsWith(testFilePath.stem().string(), Paths::TEST_SUFFIX)) {
                             fs::path sourcePath = Paths::testPathToSourcePath(projectContext, testFilePath);
                             fs::path makefile =
                                     Paths::getMakefilePathFromSourceFilePath(projectContext, sourcePath);
@@ -114,10 +114,10 @@ std::vector<UnitTest> TestRunner::getTestsToLaunch() {
                                         "Makefile for %s not found, candidate: %s", testFilePath, makefile);
                             }
                         } else {
-                            if (!StringUtils::endsWith(testFilePath.stem().c_str(), Paths::TEST_SUFFIX) &&
-                                !StringUtils::endsWith(testFilePath.stem().c_str(), Paths::STUB_SUFFIX) &&
-                                !StringUtils::endsWith(testFilePath.stem().c_str(), Paths::MAKE_WRAPPER_SUFFIX) &&
-                                !StringUtils::endsWith(testFilePath.c_str(), Paths::MAKEFILE_EXTENSION)) {
+                            if (!StringUtils::endsWith(testFilePath.stem().string(), Paths::TEST_SUFFIX) &&
+                                !StringUtils::endsWith(testFilePath.stem().string(), Paths::STUB_SUFFIX) &&
+                                !StringUtils::endsWith(testFilePath.stem().string(), Paths::MAKE_WRAPPER_SUFFIX) &&
+                                !StringUtils::endsWith(testFilePath.string(), Paths::MAKEFILE_EXTENSION)) {
                                 LOG_S(WARNING) << "Found extra file in test directory: " << testFilePath;
                             }
                         }

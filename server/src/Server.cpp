@@ -467,10 +467,14 @@ Status Server::TestsGenServiceImpl::provideLoggingCallbacks(
         loguru::set_name_to_verbosity_callback(&::MaxNameToVerbosityCallback);
         loguru::add_callback(callbackName.c_str(), handler, &data,
                              loguru::get_verbosity_from_name(logLevel.c_str()));
+        // fs::path::c_str() is const wchar_t* on Windows, and loguru keeps
+        // the pointer as the callback's identity, so these outlive the call.
+        const std::string allLogName = allLogPath.string();
+        const std::string latestLogName = latestLogPath.string();
         if (openFiles) {
-            loguru::add_file(allLogPath.c_str(), loguru::Append,
+            loguru::add_file(allLogName.c_str(), loguru::Append,
                              loguru::Verbosity_MAX);
-            loguru::add_file(latestLogPath.c_str(), loguru::Truncate,
+            loguru::add_file(latestLogName.c_str(), loguru::Truncate,
                              loguru::Verbosity_INFO);
         }
         holdLockFlag[callbackName] = true;
@@ -488,8 +492,8 @@ Status Server::TestsGenServiceImpl::provideLoggingCallbacks(
         }
         loguru::remove_callback(callbackName.c_str());
         if (openFiles) {
-            loguru::remove_callback(allLogPath.c_str());
-            loguru::remove_callback(latestLogPath.c_str());
+            loguru::remove_callback(allLogName.c_str());
+            loguru::remove_callback(latestLogName.c_str());
         }
         channelStorage[client] = false;
     }
