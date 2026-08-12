@@ -281,6 +281,8 @@ namespace Commands {
 
         [[nodiscard]] bool getSkipObjectWithoutSource() const;
 
+        [[nodiscard]] bool doInstrumentUndefinedBehaviour() const;
+
     private:
         CLI::Option_group *settingsContextOptions;
         bool generateForStaticFunctions = true;
@@ -292,6 +294,7 @@ namespace Commands {
         ErrorMode errorMode = ErrorMode::FAILING;
         bool differentVariablesOfTheSameType = false;
         bool skipObjectWithoutSource = false;
+        bool noUbsan = false;
     };
 };
 

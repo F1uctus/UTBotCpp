@@ -109,6 +109,8 @@ message SettingsContext {
     ErrorMode errorMode = 7;
     bool differentVariablesOfTheSameType = 8;
     bool skipObjectWithoutSource = 9;
+    // Whether the bitcode given to KLEE carries UBSan instrumentation.
+    bool instrumentUndefinedBehaviour = 10;
 }
 
 message SnippetRequest {

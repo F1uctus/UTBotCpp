@@ -169,8 +169,13 @@ KleeGenerator::getCompileCommandForKlee(const fs::path &hintPath,
                                         "-fstandalone-debug",
                                         "-fno-discard-value-names",
                                         "-fno-elide-constructors",
-                                        "-D" + PrinterUtils::KLEE_MODE + "=1",
-                                        SanitizerUtils::CLANG_SANITIZER_CHECKS_FLAG};
+                                        "-D" + PrinterUtils::KLEE_MODE + "=1"};
+    if (testGen->settingsContext.instrumentUndefinedBehaviour) {
+        // These are what give KLEE something to report undefined behaviour
+        // from; without them a UB-free and a UB-ridden path look alike. They
+        // are also most of the bitcode -- see the setting for the cost.
+        extraFlags.emplace_back(SanitizerUtils::CLANG_SANITIZER_CHECKS_FLAG);
+    }
     if (Paths::isCXXFile(srcFilePath)) {
         command.addFlagToBegin(CompilationUtils::getIncludePath(Paths::getAccessPrivateLibPath()));
     }
