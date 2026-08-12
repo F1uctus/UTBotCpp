@@ -174,6 +174,10 @@ KleeGenerator::getCompileCommandForKlee(const fs::path &hintPath,
     if (Paths::isCXXFile(srcFilePath)) {
         command.addFlagToBegin(CompilationUtils::getIncludePath(Paths::getAccessPrivateLibPath()));
     }
+    // The generated harness includes klee/klee.h. In a bundled distribution
+    // that header sits beside the tools rather than anywhere the compiler looks
+    // by default, so the path is supplied here instead of being assumed.
+    command.addFlagToBegin(CompilationUtils::getIncludePath(Paths::getKleeIncludeDir()));
     command.addFlagsToBegin(flags);
     command.addFlagsToBegin(extraFlags);
     command.addFlagToBegin(
