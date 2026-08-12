@@ -35,13 +35,26 @@ endif ()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -g -fstandalone-debug -fno-discard-value-names -fno-elide-constructors")
-set(CMAKE_EXE_LINKER_FLAGS "-Wl,-export-dynamic")
+# clang-cl takes the MSVC spelling of everything, and link.exe understands none
+# of the GNU flags below, so each of these is asked for in the dialect of the
+# driver that will read it.
+if (MSVC)
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /Od /Zi")
+else ()
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -O0 -g -fstandalone-debug -fno-discard-value-names -fno-elide-constructors")
+    # -export-dynamic keeps the symbol table for backtraces; there is no
+    # equivalent for a PE image, which exports only what it declares.
+    set(CMAKE_EXE_LINKER_FLAGS "-Wl,-export-dynamic")
+endif ()
 
 include(cmake/build_type.cmake)
 
 enable_testing()
-add_compile_options(-frtti -fexceptions)
+if (MSVC)
+    add_compile_options(/EHsc /GR)
+else ()
+    add_compile_options(-frtti -fexceptions)
+endif ()
 
 set(CMAKE_PREFIX_PATH $ENV{UTBOT_INSTALL_DIR})
 find_package(Clang REQUIRED)
@@ -57,7 +70,11 @@ add_definitions(${CLANG_DEFINITIONS})
 # The server needs both -- it catches by reference throughout and the gRPC and
 # CLI11 headers do too -- so they are re-asserted here, after LLVM has had its
 # say.
-add_compile_options(-fexceptions -frtti)
+if (MSVC)
+    add_compile_options(/EHsc /GR)
+else ()
+    add_compile_options(-fexceptions -frtti)
+endif ()
 
 add_definitions(-DUTBOT_DEV_ROOT_DIR="$ENV{UTBOT_ALL}")
 
@@ -73,8 +90,12 @@ find_package(Protobuf CONFIG REQUIRED)
 find_package(gRPC CONFIG REQUIRED)
 
 add_definitions(-DLOGURU_WITH_STREAMS=1)
-SET(GCC_COVERAGE_LINK_FLAGS "-lpthread -ldl")
-SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${GCC_COVERAGE_LINK_FLAGS}")
+# Threads::Threads is already required above and carries whatever the platform
+# needs; -ldl has no Windows counterpart, since a PE image loads libraries
+# through the kernel rather than through a separate library.
+if (NOT MSVC)
+    SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -lpthread -ldl")
+endif ()
 
 get_filename_component(UTBOT_DIR ${PROJECT_SOURCE_DIR} DIRECTORY)
 

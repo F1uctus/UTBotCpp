@@ -394,7 +394,8 @@ jobs:
             -DCMAKE_POLICY_DEFAULT_CMP0091=NEW `
             -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded `
             -DLLVM_DIR="$env:LLVM_ROOT\lib\cmake\llvm" `
-            -DClang_DIR="$env:LLVM_ROOT\lib\cmake\clang"
+            -DClang_DIR="$env:LLVM_ROOT\lib\cmake\clang" `
+            -DENABLE_UNIT_TESTS=OFF
           if ($LASTEXITCODE -ne 0) { throw 'configuring the server failed' }
 
       - name: Build
