@@ -459,12 +459,17 @@ jobs:
 
       - name: Smoke test -- the server binary runs
         run: |
-          # Generation itself is not exercised here yet. It drives its build
-          # steps through make, and the recipes it writes are POSIX shell
-          # ("cd X && mkdir -p Y && clang ..."), neither of which exists on
-          # Windows. Replacing that driver -- emitting ninja, which is native,
-          # handles the dependency graph and needs no shell -- is the remaining
-          # piece of work, tracked separately.
+          # Generation itself is not exercised here yet. Its compile steps now
+          # run as processes and its recipes are written in the shell that will
+          # read them, but the link step still goes through make.
+          #
+          # That one is not a translation job. The root module is linked twice:
+          # once without stubs, then again after the missing symbols have been
+          # stubbed, and the stub list reaches the second link as the make
+          # variable $(STUB_BITCODE_FILES), defined by a makefile the first pass
+          # writes. Running the link directly means materialising that list in
+          # the server and re-planning the second pass, not just spelling the
+          # recipe differently.
           #
           # Until then this checks what is true: the binary links, starts, and
           # reports its interface.
