@@ -1,9 +1,15 @@
 #include "ServerUtils.h"
 
-#include <sys/socket.h>
-#include <netinet/in.h>
+// checkPort binds a socket to see whether the port is free. The Berkeley API
+// is the same on Windows through Winsock, but it lives in different headers,
+// closes with closesocket rather than close, and needs the library started.
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#else
 #include <arpa/inet.h>
-#ifndef _WIN32
+#include <netinet/in.h>
+#include <sys/socket.h>
 #include <unistd.h>
 #endif
 
@@ -86,8 +92,23 @@ namespace ServerUtils {
 
     bool checkPort(std::string host, uint16_t port) {
         bool result = true;
+#ifdef _WIN32
+        // Winsock is not usable until it has been started, and every process
+        // that uses it has to do so; gRPC starts its own copy but that says
+        // nothing about this one.
+        WSADATA wsaData;
+        if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+            return false;
+        }
+        struct WinsockScope {
+            ~WinsockScope() { WSACleanup(); }
+        } winsockScope;
+        SOCKET sock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
+        if (sock != INVALID_SOCKET) {
+#else
         int sock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
         if (sock != -1) {
+#endif
             sockaddr_in socketIn;
             socketIn.sin_family = AF_INET;
             socketIn.sin_port = htons(port);
@@ -102,14 +123,20 @@ namespace ServerUtils {
             }
             if (result) {
                 int so_error;
+#ifdef _WIN32
+                int len = sizeof so_error;
+                result = getsockopt(sock, SOL_SOCKET, SO_ERROR,
+                                    reinterpret_cast<char *>(&so_error), &len) == 0;
+#else
                 socklen_t len = sizeof so_error;
-                if (getsockopt(sock, SOL_SOCKET, SO_ERROR, &so_error, &len) == 0) {
-                    result = true;
-                } else {
-                    result = false;
-                }
+                result = getsockopt(sock, SOL_SOCKET, SO_ERROR, &so_error, &len) == 0;
+#endif
             }
+#ifdef _WIN32
+            closesocket(sock);
+#else
             close(sock);
+#endif
         }
         return result;
     }
