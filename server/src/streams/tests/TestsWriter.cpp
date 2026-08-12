@@ -47,7 +47,7 @@ void TestsWriter::backupIfExists(const fs::path &filePath) {
         tm *gmt = localtime(&tt);
 
         std::stringstream nfn;
-        nfn << filePath.stem().c_str() << "-" << std::put_time(gmt, "%Y%m%d%H%M%S")
+        nfn << filePath.stem().string() << "-" << std::put_time(gmt, "%Y%m%d%H%M%S")
             << filePath.extension().c_str();
 
         LOG_S(INFO) << "Backup previous report to " << nfn.str();
