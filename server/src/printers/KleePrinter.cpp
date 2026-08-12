@@ -1,5 +1,7 @@
 #include "KleePrinter.h"
 
+#include "utils/KleeOptions.h"
+
 #include "KleeConstraintsPrinter.h"
 #include "PathSubstitution.h"
 #include "Paths.h"
@@ -40,14 +42,24 @@ printer::KleePrinter::KleePrinter(const types::TypesHandler *typesHandler,
 void KleePrinter::writePosixWrapper(const Tests &tests,
                                     const tests::Tests::MethodDescription &testMethod) {
     declTestEntryPoint(tests, testMethod, false);
-    strFunctionCall(PrinterUtils::POSIX_INIT, {"&" + PrinterUtils::UTBOT_ARGC, "&" + PrinterUtils::UTBOT_ARGV});
+    // klee_init_env and the stdin check are defined by the POSIX runtime. The
+    // wrapper is still wanted without it -- KLEE starts an entry point the way
+    // it starts main, so something has to accept argc/argv and forward them --
+    // but calling into a runtime that was never linked fails the whole run.
+    const bool posix = KleeOptions::targetHasPosixRuntime();
+    if (posix) {
+        strFunctionCall(PrinterUtils::POSIX_INIT,
+                        {"&" + PrinterUtils::UTBOT_ARGC, "&" + PrinterUtils::UTBOT_ARGV});
+    }
     std::string entryPoint = KleeUtils::entryPointFunction(tests, testMethod.name, false, true);
     strDeclareVar("int", KleeUtils::RESULT_VARIABLE_NAME, constrFunctionCall(entryPoint,
                                                                              {PrinterUtils::UTBOT_ARGC,
                                                                               PrinterUtils::UTBOT_ARGV,
                                                                               PrinterUtils::UTBOT_ENVP},
                                                                              "", std::nullopt, false));
-    strFunctionCall(PrinterUtils::POSIX_CHECK_STDIN_READ, {});
+    if (posix) {
+        strFunctionCall(PrinterUtils::POSIX_CHECK_STDIN_READ, {});
+    }
     strReturn(KleeUtils::RESULT_VARIABLE_NAME);
     closeBrackets(1);
     ss << printer::NL;

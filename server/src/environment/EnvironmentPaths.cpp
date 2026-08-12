@@ -89,8 +89,14 @@ namespace Paths {
         return getUTBotInstallDir() / "lib" / "LLVMgold.so";
     }
 
+    fs::path getLLVMLink() {
+        return getUTBotInstallDir() / "bin" / "llvm-link";
+    }
+
     fs::path getAr() {
-        return getUTBotDebsInstallDir() / "usr" / "bin" / "ar";
+        // llvm-ar, not binutils ar: it reads and indexes bitcode members
+        // natively, where binutils needs the LLVMgold plugin to do it at all.
+        return getUTBotInstallDir() / "bin" / "llvm-ar";
     }
 
     fs::path getLdGold() {

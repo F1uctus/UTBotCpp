@@ -549,8 +549,6 @@ getArchiveCommands(fs::path const &workingDir,
             moveKleeTemporaryFileArgumentToBegin(arguments);
 
             arguments.insert(arguments.begin(), { Paths::getAr() });
-            CollectionUtils::extend(arguments,
-                                    std::vector<std::string>{ "--plugin", Paths::getLLVMgold() });
             utbot::LinkCommand result{ arguments, workingDir, shouldChangeDirectory };
             result.setOutput(output);
             return result;
@@ -558,10 +556,34 @@ getArchiveCommands(fs::path const &workingDir,
     return commands;
 }
 
-static const std::vector<std::string> LD_GOLD_OPTIONS = {
-    Paths::getLdGold(), "--plugin", Paths::getLLVMgold(),
-    "-plugin-opt", "emit-llvm", "--allow-multiple-definition",
-    "-relocatable"
+/// The bitcode link step.
+///
+/// This used to be ld.gold driving the LLVMgold plugin:
+///
+///     ld.gold --plugin LLVMgold.so -plugin-opt emit-llvm
+///             --allow-multiple-definition -relocatable
+///
+/// which exists only on Linux, only when binutils was built with plugin
+/// support, and is absent from most current distributions -- gold has been
+/// deprecated upstream. llvm-link is part of LLVM itself, so it is available
+/// wherever the rest of the toolchain is, Windows included.
+///
+/// The options map across as follows:
+///
+///   -plugin-opt emit-llvm, -relocatable   llvm-link only ever emits bitcode
+///   --whole-archive                       what llvm-link does with an archive
+///                                         by default
+///   (archive without --whole-archive)     --only-needed
+///   --allow-multiple-definition           no equivalent; see below
+///
+/// There is deliberately nothing standing in for --allow-multiple-definition.
+/// Under gold it meant "keep the first definition and ignore the rest", which
+/// silently picks a winner by command line order. llvm-link fails instead, and
+/// a genuine duplicate definition is worth failing on. Where one is intended --
+/// a stub replacing a real function -- --override says so explicitly, and gets
+/// the precedence right, which first-wins did not.
+static const std::vector<std::string> LLVM_LINK_OPTIONS = {
+    Paths::getLLVMLink()
 };
 
 static std::vector<std::string>
@@ -569,8 +591,7 @@ getLinkActionsForRootLibrary(fs::path const &workingDir,
                              std::vector<fs::path> const &dependencies,
                              fs::path const &rootOutput,
                              bool shouldChangeDirectory = false) {
-    std::vector<std::string> commandLine = LD_GOLD_OPTIONS;
-    commandLine.emplace_back("--whole-archive");
+    std::vector<std::string> commandLine = LLVM_LINK_OPTIONS;
     CollectionUtils::extend(
         commandLine,
         std::vector<std::string>{ StringUtils::joinWith(dependencies, " "), "-o", rootOutput });
@@ -586,11 +607,10 @@ std::string Linker::getLinkArgument(std::string const &argument,
     if (CollectionUtils::contains(linkUnitInfo.files, argument)) {
         fs::path bitcode = dependencies.at(argument);
         fs::path relativePath = fs::relative(bitcode, workingDir);
-        if (testGen.settingsContext.useStubs) {
-            return StringUtils::stringFormat("--whole-archive %s --no-whole-archive", relativePath);
-        } else {
-            return relativePath;
-        }
+        // llvm-link takes every member of an archive, which is what
+        // --whole-archive asked gold for, so the markers are neither needed nor
+        // understood.
+        return relativePath;
     }
     if (argument == linkUnitInfo.getOutput()) {
         return output;
@@ -680,7 +700,8 @@ Linker::getLinkActionsForExecutable(fs::path const &workingDir,
                                            output);
                 });
 
-            arguments.insert(arguments.begin(), LD_GOLD_OPTIONS.begin(), LD_GOLD_OPTIONS.end());
+            arguments.insert(arguments.begin(), LLVM_LINK_OPTIONS.begin(),
+                             LLVM_LINK_OPTIONS.end());
             utbot::LinkCommand result(arguments, workingDir, shouldChangeDirectory);
             result.setOutput(output);
             return result;
