@@ -1,6 +1,7 @@
 #include "HeaderPrinter.h"
 
 #include "utils/FileSystemUtils.h"
+#include "utils/KleeOptions.h"
 
 #include <fstream>
 
@@ -23,7 +24,9 @@ namespace printer {
         }
         processHeader(Include(true, "stdio.h"));
         ss << printer::NL;
-        ss << PrinterUtils::redirectStdin << printer::NL;
+        if (KleeOptions::targetHasPosixRuntime()) {
+            ss << PrinterUtils::redirectStdin << printer::NL;
+        }
         ss << PrinterUtils::writeToFile << printer::NL;
         ss << PrinterUtils::fromBytes << printer::NL;
         ss << PrinterUtils::constCast;

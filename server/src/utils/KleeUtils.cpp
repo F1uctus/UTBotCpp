@@ -11,8 +11,10 @@
 #include <fstream>
 #include <future>
 #include <sys/stat.h>
+#ifndef _WIN32
 #include <sys/wait.h>
 #include <unistd.h>
+#endif
 #include <unordered_map>
 #include <unordered_set>
 
