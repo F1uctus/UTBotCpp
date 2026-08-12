@@ -39,6 +39,14 @@ private:
     const utbot::ProjectContext projectContext;
     const utbot::SettingsContext settingsContext;
 
+    /**
+     * Runs KLEE as a separate process rather than in-process from a fork,
+     * adapting the command to the option set the target KLEE actually has.
+     */
+    ExecUtils::ExecutionResult
+    runKleeProcess(const std::vector<std::string> &argvData,
+                   const std::optional<std::chrono::seconds> &timeout);
+
     void processBatchWithoutInteractive(const std::vector<tests::TestMethod> &testMethods,
                                         tests::Tests &tests,
                                         std::vector<tests::MethodKtests> &ktests);

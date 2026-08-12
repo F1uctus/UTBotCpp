@@ -5,7 +5,8 @@
 #include "SARIFGenerator.h"
 #include "exceptions/FileNotPresentedInArtifactException.h"
 #include "exceptions/FileNotPresentedInCommandsException.h"
-#include "tasks/RunKleeTask.h"
+#include "tasks/ShellExecTask.h"
+#include "utils/KleeOptions.h"
 #include "utils/ExecUtils.h"
 #include "utils/FileSystemUtils.h"
 #include "utils/KleeUtils.h"
@@ -265,6 +266,34 @@ void KleeRunner::addTailKleeInitParams(std::vector<std::string> &argvData, const
     argvData.emplace_back(std::to_string(types::Type::symInputSize));
 }
 
+/**
+ * Runs KLEE as a separate process.
+ *
+ * It used to be called in-process, from inside a fork(), through the entry
+ * point UnitTestBot's KLEE fork exports as a library. Spawning it instead means
+ * the server does not link KLEE at all, and the same code path works on a
+ * platform with no fork() -- which is the whole point of the exercise. It also
+ * means the KLEE that gets run is the one on PATH, so the portable
+ * distribution can be dropped in without rebuilding the server.
+ */
+ExecUtils::ExecutionResult
+KleeRunner::runKleeProcess(const std::vector<std::string> &argvData,
+                           const std::optional<std::chrono::seconds> &timeout) {
+    // The command is built for the fork's option set, so it has to be adapted
+    // before an upstream-derived KLEE will accept it at all.
+    std::vector<std::string> adapted = KleeOptions::adapt(argvData);
+    const std::string executable = adapted.front();
+    const std::vector<std::string> arguments(adapted.begin() + 1, adapted.end());
+
+    LOG_S(DEBUG) << "Klee command: " << StringUtils::joinWith(adapted, " ");
+
+    return ShellExecTask::runShellCommandTask(
+        ShellExecTask::ExecutionParameters(executable, arguments),
+        /*fromDir=*/"", projectContext.projectName,
+        /*redirectStderr=*/true, /*logOut=*/false, /*ignoreErrors=*/true,
+        timeout);
+}
+
 void KleeRunner::processBatchWithoutInteractive(const std::vector<tests::TestMethod> &testMethods,
                                                 tests::Tests &tests,
                                                 std::vector<tests::MethodKtests> &ktests) {
@@ -290,8 +319,8 @@ void KleeRunner::processBatchWithoutInteractive(const std::vector<tests::TestMet
             LOG_S(DEBUG) << "Klee command: " + StringUtils::joinWith(argvData, " ");
             MEASURE_FUNCTION_EXECUTION_TIME
 
-            RunKleeTask task(cargv.size(), cargv.data(), settingsContext.timeoutPerFunction);
-            ExecUtils::ExecutionResult result __attribute__((unused)) = task.run();
+            ExecUtils::ExecutionResult result __attribute__((unused)) =
+                runKleeProcess(argvData, settingsContext.timeoutPerFunction);
             ExecUtils::throwIfCancelled();
 
             MethodKtests ktestChunk;
@@ -346,12 +375,11 @@ void KleeRunner::processBatchWithInteractive(const std::vector<tests::TestMethod
         LOG_S(DEBUG) << "Klee command: " + StringUtils::joinWith(argvData, " ");
         MEASURE_FUNCTION_EXECUTION_TIME
 
-        RunKleeTask task(cargv.size(),
-                         cargv.data(),
-                         settingsContext.timeoutPerFunction.has_value()
-                             ? settingsContext.timeoutPerFunction.value() * testMethods.size()
-                             : settingsContext.timeoutPerFunction);
-        ExecUtils::ExecutionResult result __attribute__((unused)) = task.run();
+        ExecUtils::ExecutionResult result __attribute__((unused)) = runKleeProcess(
+            argvData,
+            settingsContext.timeoutPerFunction.has_value()
+                ? settingsContext.timeoutPerFunction.value() * testMethods.size()
+                : settingsContext.timeoutPerFunction);
 
         ExecUtils::throwIfCancelled();
 
