@@ -35,7 +35,6 @@ public:
 
     BuildResult
     addLinkTargetRecursively(const fs::path &fileToBuild,
-                             printer::DefaultMakefilePrinter &bitcodeLinkMakefilePrinter,
                              const CollectionUtils::FileSet &stubSources,
                              const CollectionUtils::MapFileTo<fs::path> &bitcodeFiles,
                              std::string const &suffixForParentOfStubs,
@@ -48,11 +47,56 @@ public:
         CollectionUtils::FileSet stubsSet;
         CollectionUtils::FileSet presentedFiles;
     };
+
+    /**
+     * One step of the link, recorded where it used to be written as a makefile
+     * recipe.
+     *
+     * The steps are declared in dependency order already -- every archive
+     * before the module that consumes it -- so running them in that order is
+     * the whole of the build, and needs neither make nor a shell to read
+     * recipes with. A step either deletes a file or runs a program; the
+     * deletions were "rm -f" in the recipes, which is a file operation rather
+     * than a build step.
+     */
+    struct BuildStep {
+        std::optional<fs::path> fileToRemove;
+        std::optional<ShellExecTask::ExecutionParameters> command;
+        fs::path workDir;
+        fs::path outputDirectory;
+    };
+
+    /**
+     * The final llvm-link, which cannot be recorded like the rest.
+     *
+     * It consumes the stub bitcode, and that list is only known after the first
+     * pass has run and the missing symbols have been stubbed -- which is why
+     * the makefile referred to it as $(STUB_BITCODE_FILES), a variable a second
+     * makefile defined later. Keeping the inputs rather than the command lets
+     * it be rebuilt against whatever the stub list holds at the time it runs.
+     */
+    struct RootLinkPlan {
+        bool valid = false;
+        fs::path prefixPath;
+        fs::path archive;
+        fs::path rootOutput;
+        bool shouldChangeDirectory = false;
+    };
 private:
     BaseTestGen &testGen;
     std::shared_ptr<KleeGenerator> kleeGenerator;
     StubGen stubGen;
     std::shared_ptr<LineInfo> lineInfo;
+
+    std::vector<BuildStep> buildPlan;
+    RootLinkPlan rootLinkPlan;
+    /** Empty until stubs have been generated; usually empty throughout. */
+    std::vector<fs::path> stubBitcodeFiles;
+
+    void planRemove(const fs::path &file);
+    void planCommand(const utbot::BaseCommand &command);
+    /** Runs the recorded steps in order. Returns a message on failure. */
+    std::string runBuildPlan();
 
     CollectionUtils::FileSet testedFiles;
     CollectionUtils::MapFileTo<fs::path> bitcodeFileName;
@@ -83,13 +127,11 @@ private:
     void addToGenerated(const CollectionUtils::FileSet &objectFiles, const fs::path &output);
     fs::path getPrefixPath(const std::vector<fs::path> &dependencies, fs::path defaultPath) const;
 
-    Result<CollectionUtils::FileSet> generateStubsMakefile(const fs::path &root,
-                                                           const fs::path &outputFile,
-                                                           const fs::path &stubsMakefile) const;
-    Result<utbot::Void> linkWithStubsIfNeeded(const fs::path &linkMakefile, const fs::path &targetBitcode) const;
+    /** Generates the stubs and records their compiles into the build plan. */
+    Result<CollectionUtils::FileSet> generateStubs(const fs::path &root, const fs::path &outputFile);
+    Result<utbot::Void> linkWithStubsIfNeeded(const fs::path &targetBitcode);
 
-    fs::path declareRootLibraryTarget(printer::DefaultMakefilePrinter &bitcodeLinkMakefilePrinter,
-                                      const fs::path &output,
+    fs::path declareRootLibraryTarget(const fs::path &output,
                                       const std::vector<fs::path> &bitcodeDependencies,
                                       const fs::path &prefixPath,
                                       std::vector<utbot::LinkCommand> archiveActions,
