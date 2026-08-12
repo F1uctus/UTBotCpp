@@ -297,6 +297,17 @@ KleeRunner::runKleeProcess(const std::vector<std::string> &argvData,
     const std::string executable = adapted.front();
     const std::vector<std::string> arguments(adapted.begin() + 1, adapted.end());
 
+    // KLEE creates its output directory but not the path leading to it, and
+    // fails outright if that is missing. Whichever batch path built this
+    // command, it passes through here, so the guarantee belongs here.
+    for (const auto &argument : adapted) {
+        const std::string flag = "--output-dir=";
+        if (argument.rfind(flag, 0) == 0) {
+            fs::create_directories(fs::path(argument.substr(flag.size())).parent_path());
+            break;
+        }
+    }
+
     LOG_S(DEBUG) << "Klee command: " << StringUtils::joinWith(adapted, " ");
 
     auto result = ShellExecTask::runShellCommandTask(
