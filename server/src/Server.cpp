@@ -1,5 +1,7 @@
 #include "Server.h"
 
+#include "utils/KleeOptions.h"
+
 #include "BordersFinder.h"
 #include "FeaturesFilter.h"
 #include "GTestLogger.h"
@@ -312,7 +314,16 @@ Status Server::TestsGenServiceImpl::ProcessBaseTestRequest(BaseTestGen &testGen,
                                fetcher.getStructsToDeclare(), testGen.serverBuildDir, typesHandler)
                 .generateTestHeaders(testGen.tests, stubGen, selectedTargets, testGen.progressWriter);
         KleeRunner kleeRunner{testGen.projectContext, testGen.settingsContext};
-        bool interactiveMode = (dynamic_cast<ProjectTestGen *>(&testGen) != nullptr);
+        // Interactive mode runs KLEE once over an --entrypoints-file and reads
+        // the per-entry-point directories it leaves behind. Both are the fork's;
+        // an upstream KLEE takes a single --entry-point and writes straight into
+        // the output directory, so those per-method directories never appear and
+        // every method looks as though it produced nothing.
+        //
+        // One run per method costs a process spawn each but is what this KLEE
+        // can actually do, and processBatchWithoutInteractive already does it.
+        bool interactiveMode = KleeOptions::targetHasUnitTestBotExtensions() &&
+                               (dynamic_cast<ProjectTestGen *>(&testGen) != nullptr);
         auto generationStartTime = std::chrono::steady_clock::now();
         StatsUtils::TestsGenerationStatsFileMap generationStatsMap(testGen.projectContext,
                                                                    std::chrono::duration_cast<std::chrono::milliseconds>(

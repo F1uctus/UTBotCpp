@@ -1,5 +1,7 @@
 #include "Tests.h"
 
+#include "utils/KleeOptions.h"
+
 #include "NameDecorator.h"
 #include "exceptions/UnImplementedException.h"
 #include "printers/TestsPrinter.h"
@@ -979,7 +981,13 @@ Tests::TestCaseDescription KTestObjectParser::parseTestCaseParams(
         processGlobalParamPostValue(testCaseDescription, globalParam, rawKleeParams);
     }
 
-    if (Paths::getSourceLanguage(sourceFilePath) == utbot::Language::C) {
+    // Symbolic stdin and files are modelled by the POSIX runtime. Without it
+    // there is no stdin_read object in the test case, and demanding one threw
+    // for every single case -- so a run that had produced correct .ktest files
+    // ended up writing empty test bodies, reporting only "Parameter
+    // 'stdin_read' not found" a line at a time.
+    if (Paths::getSourceLanguage(sourceFilePath) == utbot::Language::C &&
+        KleeOptions::targetHasPosixRuntime()) {
         processSymbolicStdin(testCaseDescription, rawKleeParams);
         processSymbolicFiles(testCaseDescription, rawKleeParams);
     }
