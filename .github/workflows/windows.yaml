@@ -296,6 +296,17 @@ jobs:
               throw "no Release runtime bitcode for $architecture under $runtimeDir"
             }
           }
+          # The installed executable is run below, before the distribution is
+          # assembled. Keep its solver and CRT dependencies beside it now;
+          # otherwise Report the toolchain only works when a matching Z3 is
+          # accidentally present on the runner's PATH.
+          foreach ($dll in @(Get-ChildItem -LiteralPath "$deps\z3\bin" `
+                               -Filter '*.dll' -File -ErrorAction SilentlyContinue)) {
+            Copy-Item -LiteralPath $dll.FullName -Destination (Join-Path $prefix 'bin') -Force
+          }
+          if (-not (Test-Path -LiteralPath (Join-Path $prefix 'bin\libz3.dll'))) {
+            throw 'the installed KLEE tree contains no libz3.dll'
+          }
           "UTBOT_ALL=$(Join-Path $deps 'utbot-all')" |
             Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
