@@ -128,7 +128,7 @@ CoverageMap GcovCoverageTool::getCoverageInfo() const {
                 auto jsonPath = entry.path();
                 auto coverageJson = JsonUtils::getJsonFromFile(jsonPath);
                 for (const nlohmann::json &jsonFile: coverageJson.at("files")) {
-                    fs::path filePath(std::filesystem::path(jsonFile.at("file")));
+                    fs::path filePath(jsonFile.at("file").get<std::string>());
                     if (Paths::isGtest(filePath)) {
                         continue;
                     }

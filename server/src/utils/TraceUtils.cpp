@@ -60,5 +60,5 @@ bool errorInExceptionHeader(const std::string &fileWhereErrorFound) {
                 getFileErrorFound(errorFilePath),
                 getLineErrorFound(errorFilePath)};
     }
-    return {ErrorType::NO_ERROR};
+    return {ErrorType::NONE};
 }
