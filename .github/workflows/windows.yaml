@@ -274,7 +274,8 @@ jobs:
             -DSQLite3_LIBRARY="$env:SQLITE_ROOT\sqlite3.lib" `
             -DENABLE_POSIX_RUNTIME=OFF -DENABLE_KLEE_UCLIBC=OFF `
             -DENABLE_UNIT_TESTS=OFF `
-            -DENABLE_SYSTEM_TESTS=OFF
+            -DENABLE_SYSTEM_TESTS=OFF `
+            -DKLEE_RUNTIME_BUILD_TYPE=Release
           if ($LASTEXITCODE -ne 0) { throw 'configuring KLEE failed' }
           cmake --build $build --target install
           if ($LASTEXITCODE -ne 0) { throw 'building KLEE failed' }
@@ -286,6 +287,15 @@ jobs:
           New-Item -ItemType Directory -Path (Join-Path $prefix 'include') -Force | Out-Null
           Copy-Item -Recurse -Force submodules\klee\include\klee `
             (Join-Path $prefix 'include')
+          $runtimeDir = Join-Path $prefix 'lib\klee\runtime'
+          foreach ($architecture in @('64', 'arm32')) {
+            $runtime = @(Get-ChildItem -LiteralPath $runtimeDir `
+                           -Filter "*${architecture}_Release.bca" -File `
+                           -ErrorAction SilentlyContinue)
+            if (-not $runtime) {
+              throw "no Release runtime bitcode for $architecture under $runtimeDir"
+            }
+          }
           "UTBOT_ALL=$(Join-Path $deps 'utbot-all')" |
             Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
