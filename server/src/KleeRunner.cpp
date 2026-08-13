@@ -3,6 +3,7 @@
 #include "Paths.h"
 #include "TimeExecStatistics.h"
 #include "SARIFGenerator.h"
+#include "environment/EnvironmentPaths.h"
 #include "exceptions/FileNotPresentedInArtifactException.h"
 #include "exceptions/FileNotPresentedInCommandsException.h"
 #include "tasks/ShellExecTask.h"
@@ -258,7 +259,7 @@ KleeRunner::createKleeParams(const tests::TestMethod &testMethod,
     fs::create_directories(kleeOut.parent_path());
 
     std::vector<std::string> argvData = {
-        "klee",
+        Paths::getKlee().string(),
         "--entry-point=" + KleeUtils::entryPointFunction(tests, testMethod.methodName, true),
         "--libc=klee",
         "--utbot",
@@ -345,9 +346,9 @@ void KleeRunner::addTailKleeInitParams(std::vector<std::string> &argvData, const
  * It used to be called in-process, from inside a fork(), through the entry
  * point UnitTestBot's KLEE fork exports as a library. Spawning it instead means
  * the server does not link KLEE at all, and the same code path works on a
- * platform with no fork() -- which is the whole point of the exercise. It also
- * means the KLEE that gets run is the one on PATH, so the portable
- * distribution can be dropped in without rebuilding the server.
+ * platform with no fork() -- which is the whole point of the exercise. The
+ * executable comes from the install tree beside the server, so moving the
+ * portable distribution does not change which KLEE it runs.
  */
 ExecUtils::ExecutionResult
 KleeRunner::runKleeProcess(const std::vector<std::string> &argvData,

@@ -23,6 +23,10 @@ namespace Paths {
     /// to be somewhere the toolchain already looks.
     fs::path getKleeIncludeDir();
 
+    /// KLEE is shipped in the install tree and must not be resolved through
+    /// the launching user's PATH.
+    fs::path getKlee();
+
     fs::path getUTBotClang();
     
     fs::path getUTBotClangPP();

@@ -48,6 +48,10 @@ namespace Paths {
         return getUTBotInstallDir() / "include";
     }
 
+    fs::path getKlee() {
+        return getUTBotInstallDir() / "bin" / "klee";
+    }
+
     fs::path getUTBotDebsInstallDir() {
         if (isDevEnvironment()) {
             return fs::current_path().root_path();
