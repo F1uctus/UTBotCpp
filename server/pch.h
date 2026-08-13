@@ -5,7 +5,6 @@
 #include <chrono>
 #include <condition_variable>
 #include <exception>
-#include <experimental/type_traits>
 #include <filesystem>
 #include <forward_list>
 #include <fstream>
@@ -25,7 +24,9 @@
 #include <thread>
 #include <tuple>
 #include <type_traits>
+#ifndef _WIN32
 #include <unistd.h>
+#endif
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
