@@ -644,12 +644,32 @@ jobs:
           # put those beside utbot.exe too; Windows does not search the sibling
           # install\bin directory while loading the server.
           foreach ($runtime in @('msvcp140.dll', 'msvcp140_1.dll',
-                                  'msvcp140_2.dll', 'vcruntime140.dll',
-                                  'vcruntime140_1.dll')) {
+                                  'msvcp140_2.dll', 'msvcp140_atomic_wait.dll',
+                                  'msvcp140_codecvt_ids.dll', 'vcruntime140.dll',
+                                  'vcruntime140_1.dll', 'vcruntime140_threads.dll')) {
             $source = Join-Path "$deps\z3\bin" $runtime
+            if (-not (Test-Path -LiteralPath $source)) {
+              $source = Join-Path $env:SystemRoot "System32\$runtime"
+            }
             if (Test-Path -LiteralPath $source) {
               Copy-Item -LiteralPath $source -Destination (Join-Path $stage 'bin') -Force
             }
+          }
+
+          foreach ($required in @('bin\utbot.exe', 'install\bin\klee.exe',
+                                   'install\bin\clang.exe', 'install\bin\clang++.exe',
+                                   'install\bin\llvm-ar.exe', 'install\bin\llvm-link.exe',
+                                   'install\bin\llvm-nm.exe', 'install\include\klee\klee.h',
+                                   'bin\msvcp140.dll', 'bin\vcruntime140.dll')) {
+            $path = Join-Path $stage $required
+            if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+              throw "the distribution is missing $required"
+            }
+          }
+          $runtimeFiles = @(Get-ChildItem -LiteralPath (Join-Path $stage 'install\lib\klee\runtime') `
+                              -Filter '*_Release.bca' -File -ErrorAction SilentlyContinue)
+          if (-not $runtimeFiles) {
+            throw 'the distribution contains no Release KLEE runtime bitcode'
           }
 
           Get-ChildItem -LiteralPath $stage -Recurse -File |
@@ -665,6 +685,8 @@ jobs:
           $moved = Join-Path $env:RUNNER_TEMP 'relocated'
           Move-Item -LiteralPath $env:STAGE -Destination $moved
           $env:UTBOT_ALL = ''
+          $savedPath = $env:PATH
+          $env:PATH = "$moved\bin;$moved\install\bin;$env:SystemRoot\System32"
           & (Join-Path $moved 'install\bin\klee.exe') --version
           if ($LASTEXITCODE -ne 0) { throw 'the packaged klee does not run' }
           & (Join-Path $moved 'bin\utbot.exe') --help | Out-Null
@@ -697,6 +719,7 @@ jobs:
           if ($relocatedCases -lt 3) {
             throw "relocated generation produced $relocatedCases cases, expected at least 3"
           }
+          $env:PATH = $savedPath
           Move-Item -LiteralPath $moved -Destination $env:STAGE
 
       - name: Upload the distribution
