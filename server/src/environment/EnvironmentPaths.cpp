@@ -1,9 +1,32 @@
 #include "environment/EnvironmentPaths.h"
 
+#ifdef _WIN32
+#include <windows.h>
+
+#include <system_error>
+#include <vector>
+#endif
+
 namespace Paths {
     fs::path getExecutablePath()
     {
+#ifdef _WIN32
+        std::vector<wchar_t> pathBuffer(MAX_PATH);
+        while (true) {
+            const DWORD length = GetModuleFileNameW(
+                    nullptr, pathBuffer.data(), static_cast<DWORD>(pathBuffer.size()));
+            if (length == 0) {
+                throw std::system_error(static_cast<int>(GetLastError()), std::system_category(),
+                                        "GetModuleFileNameW");
+            }
+            if (length < pathBuffer.size()) {
+                return fs::path(std::wstring(pathBuffer.data(), length));
+            }
+            pathBuffer.resize(pathBuffer.size() * 2);
+        }
+#else
         return fs::canonical("/proc/self/exe");
+#endif
     }
 
     static bool isDevEnvironment() {
