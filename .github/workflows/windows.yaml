@@ -366,7 +366,7 @@ jobs:
           # are not workflow-expression variables, so neither the old sibling
           # path nor ${{ env.VCPKG_INSTALLATION_ROOT }} is safe here.
           path: ${{ github.workspace }}\.vcpkg-installed
-          key: vcpkg-grpc-protobuf-x64-windows-v3
+          key: vcpkg-grpc-protobuf-x64-windows-static-v1
 
       - name: Build gRPC and protobuf
         timeout-minutes: 120
@@ -384,7 +384,7 @@ jobs:
           Write-Host "Using vcpkg at $vcpkg"
 
           $installedRoot = Join-Path $env:GITHUB_WORKSPACE '.vcpkg-installed'
-          $grpcConfig = Join-Path $installedRoot 'x64-windows\share\grpc\gRPCConfig.cmake'
+          $grpcConfig = Join-Path $installedRoot 'x64-windows-static\share\grpc\gRPCConfig.cmake'
           if (Test-Path -LiteralPath $grpcConfig) {
             Write-Host "Using the cached packages at $grpcConfig"
           } else {
@@ -398,7 +398,8 @@ jobs:
             # already fetched, so an attempt resumes rather than restarts.
             $installed = $false
             foreach ($attempt in 1..5) {
-              & (Join-Path $vcpkg 'vcpkg.exe') install grpc:x64-windows protobuf:x64-windows `
+              & (Join-Path $vcpkg 'vcpkg.exe') install `
+                grpc:x64-windows-static protobuf:x64-windows-static `
                 "--x-install-root=$installedRoot"
               if ($LASTEXITCODE -eq 0) { $installed = $true; break }
               Write-Host "::warning::vcpkg install attempt $attempt failed"
@@ -415,7 +416,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ${{ github.workspace }}\.vcpkg-installed
-          key: vcpkg-grpc-protobuf-x64-windows-v3
+          key: vcpkg-grpc-protobuf-x64-windows-static-v1
 
       - name: Save the vcpkg downloads
         if: steps.vcpkg-downloads-cache.outputs.cache-hit != 'true'
@@ -433,6 +434,10 @@ jobs:
             --retry 8 --retry-delay 20 --retry-max-time 900 --retry-all-errors `
             --output (Join-Path $cli 'CLI11.hpp') `
             'https://github.com/CLIUtils/CLI11/releases/download/v2.4.2/CLI11.hpp'
+          curl.exe --fail --location --silent --show-error `
+            --retry 8 --retry-delay 20 --retry-max-time 900 --retry-all-errors `
+            --output (Join-Path $cli 'rang.hpp') `
+            'https://github.com/agauniyal/rang/releases/download/v3.1.0/rang.hpp'
           "CLI_PATH=$cli" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: Report the toolchain
@@ -448,7 +453,7 @@ jobs:
           cmake -S server -B build -G Ninja `
             -DCMAKE_BUILD_TYPE=Release `
             -DCMAKE_TOOLCHAIN_FILE="$vcpkg\scripts\buildsystems\vcpkg.cmake" `
-            -DVCPKG_TARGET_TRIPLET=x64-windows `
+            -DVCPKG_TARGET_TRIPLET=x64-windows-static `
             -DVCPKG_INSTALLED_DIR="$env:VCPKG_INSTALLED_DIR" `
             -DCMAKE_C_COMPILER="$env:LLVM_ROOT/bin/clang-cl.exe" `
             -DCMAKE_CXX_COMPILER="$env:LLVM_ROOT/bin/clang-cl.exe" `
@@ -639,10 +644,10 @@ jobs:
           # the server spawns.
           Copy-Item -Recurse -Force (Join-Path $env:UTBOT_ALL 'install') $stage
 
-          # Runtime DLLs. The server itself is /MT, but the vcpkg gRPC and
-          # protobuf builds are shared, and Z3 is shipped as a DLL.
+          # Runtime DLLs. gRPC and protobuf are linked statically with /MT to
+          # match LLVM, while Z3 is shipped as a DLL.
           $deps = Join-Path (Split-Path -Parent $env:GITHUB_WORKSPACE) 'deps'
-          foreach ($dll in @(Get-ChildItem -LiteralPath "$env:VCPKG_INSTALLED_DIR\x64-windows\bin" `
+          foreach ($dll in @(Get-ChildItem -LiteralPath "$env:VCPKG_INSTALLED_DIR\x64-windows-static\bin" `
                                -Filter '*.dll' -ErrorAction SilentlyContinue)) {
             Copy-Item -LiteralPath $dll.FullName -Destination (Join-Path $stage 'bin') -Force
           }

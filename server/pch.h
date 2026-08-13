@@ -1,5 +1,14 @@
 #pragma once
 
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#endif
+
 // stl
 #include <algorithm>
 #include <chrono>
@@ -32,6 +41,12 @@
 #include <utility>
 #include <variant>
 #include <vector>
+
+// CLI11 includes Windows shell headers. Parse those before project headers
+// introduce protobuf enum names such as BOOL and CHAR into lookup; otherwise
+// the generated names are ambiguous with the Windows SDK typedefs.
+#include <CLI11.hpp>
+#include <rang.hpp>
 
 // grpc
 #include <grpcpp/grpcpp.h>

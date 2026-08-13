@@ -5,7 +5,7 @@
 #include "path/FileSystemPath.h"
 
 enum ErrorType {
-    NO_ERROR,
+    NONE,
     ASSERTION_FAILURE,
     EXCEPTION_THROWN
 };
@@ -19,7 +19,7 @@ struct ErrorInfo {
     [[nodiscard]] ErrorInfo(ErrorType errorType_, std::string failureBody_, fs::path file, uint64_t line) : errorType(errorType_),
           failureBody(std::move(failureBody_)), fileWithFailure(std::move(file)), lineWithFailure(line) {}
 
-    [[nodiscard]] ErrorInfo() : errorType(NO_ERROR), fileWithFailure(fs::path()), lineWithFailure(0) {}
+    [[nodiscard]] ErrorInfo() : errorType(NONE), fileWithFailure(fs::path()), lineWithFailure(0) {}
 
     [[nodiscard]] ErrorInfo(ErrorType errorType_) : errorType(errorType_), fileWithFailure(), lineWithFailure(0) {}
 };
