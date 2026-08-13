@@ -195,12 +195,23 @@ namespace CompilationUtils {
 
     std::optional<fs::path> getResourceDirectory(const fs::path &buildCompilerPath) {
         auto compilerName = CompilationUtils::getCompilerName(buildCompilerPath);
+        auto queryCompiler = [&](const std::string &flag) {
+            // The compilation database may name a compiler that exists only on the
+            // client (or simply say "clang"). Resource discovery must use the
+            // compiler shipped with the server in that case. Run it directly:
+            // generation is not allowed to depend on /bin/sh being present.
+            fs::path compiler = buildCompilerPath;
+            if (!fs::exists(compiler)) {
+                compiler = getBundledCompilerPath(compilerName);
+            }
+            return ShellExecTask::runShellCommandTask(
+                    ShellExecTask::ExecutionParameters(compiler.string(), { flag }));
+        };
         switch (compilerName) {
         case CompilerName::GCC:
         case CompilerName::GXX: {
             // /usr/bin/gcc -> /usr/lib/gcc/x86_64-linux-gnu/9/libgcc.a
-            std::string command = StringUtils::stringFormat("%s -print-libgcc-file-name", buildCompilerPath);
-            auto [output, status, outPath] = ShellExecTask::runPlainShellCommand(command);
+            auto [output, status, outPath] = queryCompiler("-print-libgcc-file-name");
             if (status == 0) {
                 StringUtils::rtrim(output);
                 // /usr/lib/gcc/x86_64-linux-gnu/9/libgcc.a -> /usr/lib/gcc/x86_64-linux-gnu/9
@@ -212,7 +223,8 @@ namespace CompilationUtils {
                     return std::nullopt;
                 }
             } else {
-                LOG_S(ERROR) << "Command for detecting libgcc location failed: " << command;
+                LOG_S(ERROR) << "Command for detecting libgcc location failed: "
+                             << buildCompilerPath;
                 LOG_S(ERROR) << output;
                 return std::nullopt;
             }
@@ -221,8 +233,7 @@ namespace CompilationUtils {
         case CompilerName::CLANG:
         case CompilerName::CLANGXX: {
             // /utbot_distr/install/bin/clang -> /utbot_distr/install/lib/clang/10.0.1
-            std::string command = StringUtils::stringFormat("%s -print-resource-dir", buildCompilerPath);
-            auto [output, status, outPath] = ShellExecTask::runPlainShellCommand(command);
+            auto [output, status, outPath] = queryCompiler("-print-resource-dir");
             if (status == 0) {
                 StringUtils::rtrim(output);
                 fs::path resourceDirPath = output;
@@ -233,7 +244,8 @@ namespace CompilationUtils {
                     return std::nullopt;
                 }
             } else {
-                LOG_S(ERROR) << "Command for detecting resource dir failed: " << command;
+                LOG_S(ERROR) << "Command for detecting resource dir failed: "
+                             << buildCompilerPath;
                 LOG_S(ERROR) << output;
                 return std::nullopt;
             }
