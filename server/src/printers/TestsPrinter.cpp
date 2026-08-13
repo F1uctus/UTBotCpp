@@ -9,6 +9,7 @@
 #include "visitors/VerboseAssertsReturnValueVisitor.h"
 #include "visitors/VerboseParameterVisitor.h"
 #include "utils/KleeUtils.h"
+#include "utils/StringUtils.h"
 #include "utils/StubsUtils.h"
 
 #include "loguru.h"
@@ -365,6 +366,12 @@ void TestsPrinter::printLazyReferences(const Tests::MethodDescription &methodDes
             strComment("Assign lazy variables to pointer");
         }
         for (const auto &lazy : testCase.lazyReferences) {
+            // Return-value references use the symbolic harness name and are emitted before the
+            // generated test declares its result. This KLEE does not construct the lazy result
+            // graph that such an assignment would restore, so the reference has no valid target.
+            if (StringUtils::startsWith(lazy.varName, KleeUtils::RESULT_VARIABLE_NAME)) {
+                continue;
+            }
             strAssignVar(lazy.varName, lazy.typeName);
         }
         ss << printer::NL;
