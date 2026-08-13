@@ -318,20 +318,28 @@ jobs:
             Write-Host "Copied the resource directory to $to"
           }
 
-      - name: Cache the vcpkg downloads
-        uses: actions/cache@v4
+      - name: Restore the vcpkg downloads
+        id: vcpkg-downloads-cache
+        uses: actions/cache/restore@v4
         with:
           # Separate from the packages: these survive even when a run fails
           # partway, which is what makes the next attempt cheaper.
           path: ${{ env.VCPKG_INSTALLATION_ROOT }}\downloads
           key: vcpkg-downloads-grpc-protobuf-v1
 
-      - name: Cache the vcpkg packages
+
+      - name: Restore the vcpkg packages
         id: vcpkg-cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           # The runner image ships vcpkg already, so only what gets built into
           # it is worth carrying between runs.
+          #
+          # restore/save rather than cache: the combined action saves in a post
+          # step that is skipped when the job fails, and every run so far has
+          # failed somewhere after this point -- so an hour of gRPC was rebuilt
+          # each time and never kept. The save below runs as soon as there is
+          # something worth keeping.
           path: ${{ github.workspace }}\..\deps\vcpkg-installed
           key: vcpkg-grpc-protobuf-x64-windows-v2
 
@@ -376,6 +384,20 @@ jobs:
             Copy-Item -Recurse -Force (Join-Path $vcpkg 'installed\*') $cached
           }
           "VCPKG_ROOT_DIR=$vcpkg" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Save the vcpkg packages
+        if: steps.vcpkg-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ github.workspace }}\..\deps\vcpkg-installed
+          key: vcpkg-grpc-protobuf-x64-windows-v2
+
+      - name: Save the vcpkg downloads
+        if: steps.vcpkg-downloads-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.VCPKG_INSTALLATION_ROOT }}\downloads
+          key: vcpkg-downloads-grpc-protobuf-v1
 
       - name: Fetch CLI11
         run: |
