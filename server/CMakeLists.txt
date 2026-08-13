@@ -56,7 +56,13 @@ else ()
     add_compile_options(-frtti -fexceptions)
 endif ()
 
-set(CMAKE_PREFIX_PATH $ENV{UTBOT_INSTALL_DIR})
+# Appended, never assigned. A toolchain file gets to set this first -- vcpkg's
+# does, and that is how anything it installed is found at all -- so replacing it
+# discards those paths, and the packages below then cannot be found however
+# correctly they were built.
+if (NOT "$ENV{UTBOT_INSTALL_DIR}" STREQUAL "")
+    list(APPEND CMAKE_PREFIX_PATH $ENV{UTBOT_INSTALL_DIR})
+endif ()
 find_package(Clang REQUIRED)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${LLVM_CMAKE_DIR}")
 include(AddLLVM)
@@ -87,7 +93,11 @@ set(UTBOT_DEV_ROOT_DIR "$ENV{UTBOT_ALL}" CACHE STRING
 add_definitions(-DUTBOT_DEV_ROOT_DIR="${UTBOT_DEV_ROOT_DIR}")
 
 set(GRPC_PATH $ENV{GRPC_PATH})
-set(CMAKE_PREFIX_PATH ${GRPC_PATH}/lib/cmake/grpc ${GRPC_PATH}/lib/cmake/protobuf)
+# Only when there is one to add: unset, this contributed "/lib/cmake/grpc" and
+# took the rest of the prefix path with it.
+if (NOT "${GRPC_PATH}" STREQUAL "")
+    list(APPEND CMAKE_PREFIX_PATH ${GRPC_PATH}/lib/cmake/grpc ${GRPC_PATH}/lib/cmake/protobuf)
+endif ()
 if (NOT DEFINED _GRPC_CPP_PLUGIN_EXECUTABLE)
     set(_GRPC_CPP_PLUGIN_EXECUTABLE ${GRPC_PATH}/bin/grpc_cpp_plugin)
 endif ()
