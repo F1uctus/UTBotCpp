@@ -366,7 +366,7 @@ jobs:
           # are not workflow-expression variables, so neither the old sibling
           # path nor ${{ env.VCPKG_INSTALLATION_ROOT }} is safe here.
           path: ${{ github.workspace }}\.vcpkg-installed
-          key: vcpkg-grpc-protobuf-x64-windows-static-v1
+          key: vcpkg-grpc-protobuf-x64-windows-static-codegen-v1
 
       - name: Build gRPC and protobuf
         timeout-minutes: 120
@@ -399,7 +399,7 @@ jobs:
             $installed = $false
             foreach ($attempt in 1..5) {
               & (Join-Path $vcpkg 'vcpkg.exe') install `
-                grpc:x64-windows-static protobuf:x64-windows-static `
+                'grpc[codegen]:x64-windows-static' protobuf:x64-windows-static `
                 "--x-install-root=$installedRoot"
               if ($LASTEXITCODE -eq 0) { $installed = $true; break }
               Write-Host "::warning::vcpkg install attempt $attempt failed"
@@ -416,7 +416,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ${{ github.workspace }}\.vcpkg-installed
-          key: vcpkg-grpc-protobuf-x64-windows-static-v1
+          key: vcpkg-grpc-protobuf-x64-windows-static-codegen-v1
 
       - name: Save the vcpkg downloads
         if: steps.vcpkg-downloads-cache.outputs.cache-hit != 'true'
