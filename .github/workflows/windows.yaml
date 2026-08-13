@@ -340,8 +340,12 @@ jobs:
           # failed somewhere after this point -- so an hour of gRPC was rebuilt
           # each time and never kept. The save below runs as soon as there is
           # something worth keeping.
-          path: ${{ github.workspace }}\..\deps\vcpkg-installed
-          key: vcpkg-grpc-protobuf-x64-windows-v2
+          # Keep the install root inside the workspace. actions/cache rejects
+          # a path containing '..', and runner-provided environment variables
+          # are not workflow-expression variables, so neither the old sibling
+          # path nor ${{ env.VCPKG_INSTALLATION_ROOT }} is safe here.
+          path: ${{ github.workspace }}\.vcpkg-installed
+          key: vcpkg-grpc-protobuf-x64-windows-v3
 
       - name: Build gRPC and protobuf
         timeout-minutes: 120
@@ -352,17 +356,16 @@ jobs:
           #
           # gRPC has no binary distribution for MSVC, so it is built once and
           # the installed tree is cached. This is the long pole of a cold run.
-          $deps = Join-Path (Split-Path -Parent $env:GITHUB_WORKSPACE) 'deps'
-          $cached = Join-Path $deps 'vcpkg-installed'
           $vcpkg = $env:VCPKG_INSTALLATION_ROOT
           if (-not $vcpkg -or -not (Test-Path -LiteralPath $vcpkg)) {
             throw "no vcpkg on this image (VCPKG_INSTALLATION_ROOT=$vcpkg)"
           }
           Write-Host "Using vcpkg at $vcpkg"
 
-          if (Test-Path -LiteralPath (Join-Path $cached 'x64-windows')) {
-            Write-Host 'Restoring the cached packages'
-            Copy-Item -Recurse -Force (Join-Path $cached '*') (Join-Path $vcpkg 'installed')
+          $installedRoot = Join-Path $env:GITHUB_WORKSPACE '.vcpkg-installed'
+          $grpcConfig = Join-Path $installedRoot 'x64-windows\share\grpc\gRPCConfig.cmake'
+          if (Test-Path -LiteralPath $grpcConfig) {
+            Write-Host "Using the cached packages at $grpcConfig"
           } else {
             # Retried: every failure here so far has been a download, not a
             # build -- vcpkg fetching its own ninja, or the release CDN
@@ -374,23 +377,24 @@ jobs:
             # already fetched, so an attempt resumes rather than restarts.
             $installed = $false
             foreach ($attempt in 1..5) {
-              & (Join-Path $vcpkg 'vcpkg.exe') install grpc:x64-windows protobuf:x64-windows
+              & (Join-Path $vcpkg 'vcpkg.exe') install grpc:x64-windows protobuf:x64-windows `
+                "--x-install-root=$installedRoot"
               if ($LASTEXITCODE -eq 0) { $installed = $true; break }
               Write-Host "::warning::vcpkg install attempt $attempt failed"
               Start-Sleep -Seconds 120
             }
             if (-not $installed) { throw 'installing grpc failed after 5 attempts' }
-            New-Item -ItemType Directory -Path $cached -Force | Out-Null
-            Copy-Item -Recurse -Force (Join-Path $vcpkg 'installed\*') $cached
           }
           "VCPKG_ROOT_DIR=$vcpkg" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "VCPKG_INSTALLED_DIR=$installedRoot" |
+            Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: Save the vcpkg packages
         if: steps.vcpkg-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
-          path: ${{ github.workspace }}\..\deps\vcpkg-installed
-          key: vcpkg-grpc-protobuf-x64-windows-v2
+          path: ${{ github.workspace }}\.vcpkg-installed
+          key: vcpkg-grpc-protobuf-x64-windows-v3
 
       - name: Save the vcpkg downloads
         if: steps.vcpkg-downloads-cache.outputs.cache-hit != 'true'
@@ -424,6 +428,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release `
             -DCMAKE_TOOLCHAIN_FILE="$vcpkg\scripts\buildsystems\vcpkg.cmake" `
             -DVCPKG_TARGET_TRIPLET=x64-windows `
+            -DVCPKG_INSTALLED_DIR="$env:VCPKG_INSTALLED_DIR" `
             -DCMAKE_C_COMPILER="$env:LLVM_ROOT/bin/clang-cl.exe" `
             -DCMAKE_CXX_COMPILER="$env:LLVM_ROOT/bin/clang-cl.exe" `
             -DCMAKE_POLICY_DEFAULT_CMP0091=NEW `
@@ -606,7 +611,7 @@ jobs:
           # Runtime DLLs. The server itself is /MT, but the vcpkg gRPC and
           # protobuf builds are shared, and Z3 is shipped as a DLL.
           $deps = Join-Path (Split-Path -Parent $env:GITHUB_WORKSPACE) 'deps'
-          foreach ($dll in @(Get-ChildItem -LiteralPath "$env:VCPKG_ROOT_DIR\installed\x64-windows\bin" `
+          foreach ($dll in @(Get-ChildItem -LiteralPath "$env:VCPKG_INSTALLED_DIR\x64-windows\bin" `
                                -Filter '*.dll' -ErrorAction SilentlyContinue)) {
             Copy-Item -LiteralPath $dll.FullName -Destination (Join-Path $stage 'bin') -Force
           }
