@@ -578,7 +578,15 @@ jobs:
           ConvertTo-Json -Depth 5 -InputObject $link |
             Set-Content -LiteralPath (Join-Path $build 'link_commands.json') -Encoding ascii
 
-          $utbot = Join-Path $env:GITHUB_WORKSPACE 'build\utbot.exe'
+          # Run from the distribution layout. With UTBOT_DEV_ROOT_DIR empty,
+          # the executable deliberately resolves install\bin relative to its
+          # own parent; the build-tree path has no such sibling and therefore
+          # cannot exercise the packaged tools.
+          $runtimeBin = Join-Path $env:UTBOT_ALL 'bin'
+          New-Item -ItemType Directory -Path $runtimeBin -Force | Out-Null
+          $utbot = Join-Path $runtimeBin 'utbot.exe'
+          Copy-Item -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'build\utbot.exe') `
+            -Destination $utbot -Force
           & $utbot generate -p $fixture -b build -t tests --function-timeout 15 project
           if ($LASTEXITCODE -ne 0) { throw "utbot generate failed ($LASTEXITCODE)" }
 
@@ -595,6 +603,8 @@ jobs:
             Write-Host $body
             throw "expected at least 3 cases for three branches, got $cases"
           }
+          "GENERATION_FIXTURE=$fixture" |
+            Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
       - name: Package the portable distribution
         run: |
@@ -619,6 +629,18 @@ jobs:
                                -Filter '*.dll' -ErrorAction SilentlyContinue)) {
             Copy-Item -LiteralPath $dll.FullName -Destination (Join-Path $stage 'install\bin') -Force
           }
+          # The Z3 release carries the MSVC redistributable DLLs that KLEE's
+          # own portable package uses. gRPC/protobuf need the same runtime, so
+          # put those beside utbot.exe too; Windows does not search the sibling
+          # install\bin directory while loading the server.
+          foreach ($runtime in @('msvcp140.dll', 'msvcp140_1.dll',
+                                  'msvcp140_2.dll', 'vcruntime140.dll',
+                                  'vcruntime140_1.dll')) {
+            $source = Join-Path "$deps\z3\bin" $runtime
+            if (Test-Path -LiteralPath $source) {
+              Copy-Item -LiteralPath $source -Destination (Join-Path $stage 'bin') -Force
+            }
+          }
 
           Get-ChildItem -LiteralPath $stage -Recurse -File |
             Measure-Object -Property Length -Sum |
@@ -637,11 +659,40 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'the packaged klee does not run' }
           & (Join-Path $moved 'bin\utbot.exe') --help | Out-Null
           if ($LASTEXITCODE -ne 0) { throw 'the packaged utbot does not run' }
+
+          # Start the server's complete generation path again after the move.
+          # This resolves and spawns clang, llvm-ar, llvm-link and KLEE from the
+          # relocated install tree; --help alone cannot detect a stale tool
+          # root baked into the executable.
+          & (Join-Path $moved 'bin\utbot.exe') generate `
+            -p $env:GENERATION_FIXTURE -b build -t relocated-tests `
+            --function-timeout 15 project
+          if ($LASTEXITCODE -ne 0) {
+            throw "the relocated distribution cannot generate tests ($LASTEXITCODE)"
+          }
+          $relocatedTests = @(Get-ChildItem -LiteralPath $env:GENERATION_FIXTURE `
+                                -Recurse -Filter '*_test.cpp' |
+                              Where-Object FullName -Like '*relocated-tests*')
+          if (-not $relocatedTests) {
+            throw 'the relocated distribution generated no test files'
+          }
+          $relocatedClassify = $relocatedTests |
+            Where-Object Name -Like 'classify*' | Select-Object -First 1
+          if (-not $relocatedClassify) {
+            throw 'the relocated distribution generated no classify test file'
+          }
+          $relocatedBody = Get-Content -Raw -LiteralPath $relocatedClassify.FullName
+          $relocatedCases = ([regex]::Matches($relocatedBody, 'TEST\(')).Count
+          Write-Host "relocated classify test cases: $relocatedCases"
+          if ($relocatedCases -lt 3) {
+            throw "relocated generation produced $relocatedCases cases, expected at least 3"
+          }
           Move-Item -LiteralPath $moved -Destination $env:STAGE
 
       - name: Upload the distribution
         uses: actions/upload-artifact@v4
         with:
-          name: utbot-windows-x86_64
+          name: utbot-win64-llvm${{ env.LLVM_VERSION }}
           path: ${{ env.STAGE }}
           if-no-files-found: error
+          retention-days: 30
