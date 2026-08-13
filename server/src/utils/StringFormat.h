@@ -1,8 +1,9 @@
 #ifndef UNITTESTBOT_STRINGFORMAT_H
 #define UNITTESTBOT_STRINGFORMAT_H
 
+#include "Detected.h"
+
 #include <exception>
-#include <experimental/type_traits>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -16,7 +17,7 @@ namespace StringUtils {
 
         template <typename Arg>
         decltype(auto) extractCString(Arg &&arg) {
-            if constexpr (std::experimental::is_detected_v<has_c_str, Arg>) {
+            if constexpr (Utils::isDetectedV<has_c_str, Arg>) {
                 return std::forward<Arg>(arg).c_str();
             } else {
                 return std::forward<Arg>(arg);

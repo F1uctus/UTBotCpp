@@ -8,7 +8,7 @@
 namespace TimeUtils {
     using namespace std::chrono_literals;
 
-    typedef std::chrono::time_point<std::chrono::_V2::system_clock> systemClockTimePoint;
+    using systemClockTimePoint = std::chrono::system_clock::time_point;
 
     static const auto DAY_DURATION = 86400s;
 
