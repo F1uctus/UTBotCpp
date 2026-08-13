@@ -134,7 +134,10 @@ include_directories(${TSL_PATH}/include)
 set(PARALLEL_HASHMAP_PATH "${SUBMODULES_DIR}/parallel-hashmap")
 include_directories(${PARALLEL_HASHMAP_PATH})
 
-set(KLEE_PATH $ENV{UTBOT_ALL}/klee/)
+# The parser is built from the KTest reader in the pinned source submodule. Do not
+# derive this from UTBOT_ALL: that is the runtime/install layout, and on Windows
+# its backslashes are also parsed as CMake escapes when used as a source path.
+set(KLEE_PATH "${UTBOT_DIR}/submodules/klee")
 include_directories(${KLEE_PATH}/include)
 
 # KLEE itself is not linked -- it is spawned as a process -- but its test cases
