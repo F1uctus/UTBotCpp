@@ -98,10 +98,9 @@ set(GRPC_PATH $ENV{GRPC_PATH})
 if (NOT "${GRPC_PATH}" STREQUAL "")
     list(APPEND CMAKE_PREFIX_PATH ${GRPC_PATH}/lib/cmake/grpc ${GRPC_PATH}/lib/cmake/protobuf)
 endif ()
-if (NOT DEFINED _GRPC_CPP_PLUGIN_EXECUTABLE)
-    set(_GRPC_CPP_PLUGIN_EXECUTABLE ${GRPC_PATH}/bin/grpc_cpp_plugin)
+if (NOT "${GRPC_PATH}" STREQUAL "")
+    include_directories(${GRPC_PATH}/include)
 endif ()
-include_directories(${GRPC_PATH}/include)
 
 find_package(Threads REQUIRED)
 find_package(Protobuf CONFIG REQUIRED)
@@ -185,22 +184,30 @@ set(PROTO_COMPILE_DIR "${CMAKE_CURRENT_BINARY_DIR}/protobuf")
 file(GLOB PROTO_FILES "${PROTO_DIR}/*.proto")
 file(MAKE_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/protobuf)
 
+set(ALL_PROTO_GENERATED_SOURCES)
 foreach (proto_file ${PROTO_FILES})
     get_filename_component(proto_src ${proto_file} PATH)
     get_filename_component(proto_filename ${proto_file} NAME_WE)
-    execute_process(
-            COMMAND protoc --grpc_out ${PROTO_COMPILE_DIR}
-            --cpp_out ${PROTO_COMPILE_DIR}
-            -I "${proto_src}"
-            --plugin=protoc-gen-grpc=${_GRPC_CPP_PLUGIN_EXECUTABLE}
-            "${proto_file}")
+    set(proto_outputs
+            ${PROTO_COMPILE_DIR}/${proto_filename}.grpc.pb.cc
+            ${PROTO_COMPILE_DIR}/${proto_filename}.grpc.pb.h
+            ${PROTO_COMPILE_DIR}/${proto_filename}.pb.cc
+            ${PROTO_COMPILE_DIR}/${proto_filename}.pb.h)
+    add_custom_command(
+            OUTPUT ${proto_outputs}
+            COMMAND $<TARGET_FILE:protobuf::protoc>
+            ARGS --grpc_out ${PROTO_COMPILE_DIR}
+                 --cpp_out ${PROTO_COMPILE_DIR}
+                 -I ${proto_src}
+                 --plugin=protoc-gen-grpc=$<TARGET_FILE:gRPC::grpc_cpp_plugin>
+                 ${proto_file}
+            DEPENDS ${proto_file} protobuf::protoc gRPC::grpc_cpp_plugin
+            COMMENT "Generating C++ and gRPC sources from ${proto_filename}.proto"
+            VERBATIM)
+    list(APPEND ALL_PROTO_GENERATED_SOURCES ${proto_outputs})
     set_property(SOURCE main.cpp APPEND PROPERTY OBJECT_DEPENDS
             ${PROTO_COMPILE_DIR}/${proto_filename}.grpc.pb.h)
 endforeach ()
-
-file(GLOB ALL_PROTO_GENERATED_SOURCES
-        ${PROTO_COMPILE_DIR}/*.cc
-        ${PROTO_COMPILE_DIR}/*.h)
 
 include_directories("${CMAKE_CURRENT_BINARY_DIR}")
 
