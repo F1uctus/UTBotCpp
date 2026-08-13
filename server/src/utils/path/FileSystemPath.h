@@ -2,6 +2,7 @@
 #define UNITTESTBOT_FILESYSTEMPATH_H
 
 #include <filesystem>
+#include <string>
 #include <vector>
 
 #include <llvm/ADT/StringRef.h>
@@ -83,7 +84,10 @@ namespace fs {
         }
 
         const char * c_str() const {
-            return path_.c_str();
+            // The server's process, LLVM and formatting APIs consume narrow strings even on
+            // Windows, where std::filesystem::path::c_str() returns const wchar_t *.
+            stringCache_ = path_.string();
+            return stringCache_.c_str();
         }
 
         bool empty() const noexcept {
@@ -180,6 +184,7 @@ namespace fs {
 
     private:
         std::filesystem::path path_;
+        mutable std::string stringCache_;
 
         std::filesystem::path normalizedTrimmed(const std::filesystem::path &p) {
             auto r = p.lexically_normal();

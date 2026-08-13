@@ -2,11 +2,11 @@
 #define UNITTESTBOT_GRPCUTILS_H
 
 #include "ProjectContext.h"
+#include "utils/Detected.h"
 #include "utils/path/FileSystemPath.h"
 
 #include <protobuf/testgen.grpc.pb.h>
 
-#include <experimental/type_traits>
 #include <memory>
 #include <utility>
 
@@ -119,9 +119,9 @@ namespace GrpcUtils {
             return true;
         } else if constexpr (std::is_same_v<Request, testsgen::ProjectRequest>) {
             return request.synchronizecode();
-        } else if constexpr (std::experimental::is_detected_v<has_projectrequest, Request>) {
+        } else if constexpr (Utils::isDetectedV<has_projectrequest, Request>) {
             return synchronizeCode(request.projectrequest());
-        } else if constexpr (std::experimental::is_detected_v<has_linerequest, Request>) {
+        } else if constexpr (Utils::isDetectedV<has_linerequest, Request>) {
             return synchronizeCode(request.linerequest());
         }
     }

@@ -68,17 +68,6 @@ namespace CollectionUtils {
     }
 
     template <class Pr, typename ...Args>
-    size_t iterative_erase(tsl::ordered_map<Args...> &items, Pr &&pred) {
-        tsl::ordered_map<Args...> filtered{items.bucket_count()};
-        for (auto it = items.begin(); it != items.end(); it++) {
-            if (!pred(it.template value())) {
-                filtered.template insert(std::move(*it));
-            }
-        }
-        return items = filtered;
-    }
-
-    template <class Pr, typename ...Args>
     size_t erase_if(std::unordered_map<Args...> &map, Pr &&pred) {
         return iterative_erase(map, std::forward<Pr>(pred));
     }
@@ -91,8 +80,8 @@ namespace CollectionUtils {
         size_t erased = 0;
         tsl::ordered_map<Args...> filtered{ map.bucket_count() };
         for (auto it = map.begin(); it != map.end(); it++) {
-            if (!pred(it.template value())) {
-                filtered.template insert(std::move(*it));
+            if (!pred(it.value())) {
+                filtered.insert(std::move(*it));
             } else {
                 erased++;
             }
@@ -324,7 +313,7 @@ namespace CollectionUtils {
         if (it == map.end()) {
             return std::nullopt;
         } else {
-            return std::make_optional(std::ref<V>(it.template value()));
+            return std::make_optional(std::ref<V>(it.value()));
         }
     }
 
