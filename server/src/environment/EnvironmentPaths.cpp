@@ -72,6 +72,10 @@ namespace Paths {
         return getUTBotInstallDir() / "bin" / "cmake";
     }
 
+    fs::path getNinja() {
+        return getUTBotInstallDir() / "bin" / "ninja";
+    }
+
     fs::path getMake() {
 #ifdef _WIN32
         // Windows has no make of its own, so the distribution carries one and

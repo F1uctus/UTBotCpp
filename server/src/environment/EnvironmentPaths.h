@@ -16,6 +16,10 @@ namespace Paths {
 
     fs::path getCMake();
 
+    /// The generator CMake is driven with where the platform's default one
+    /// writes no compile_commands.json.
+    fs::path getNinja();
+
     fs::path getMake();
 
     /// The shell the generated makefiles are run under. Their recipes are

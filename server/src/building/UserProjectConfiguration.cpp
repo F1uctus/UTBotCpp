@@ -1,5 +1,7 @@
 #include "UserProjectConfiguration.h"
 
+#include "CMakeFileApi.h"
+
 #include "Paths.h"
 #include "environment/EnvironmentPaths.h"
 #include "tasks/ShellExecTask.h"
@@ -87,6 +89,20 @@ UserProjectConfiguration::RunProjectConfigurationCommands(const fs::path &buildD
                     cmakeOptionsWithMandatory.emplace_back(op);
                 }
             }
+#ifdef _WIN32
+            // A clean Windows has no compiler and no build tool, and the
+            // generator CMake picks by default there is Visual Studio, which
+            // writes no compile_commands.json. All three come from the
+            // distribution instead, so what gets configured does not depend on
+            // what happens to be installed.
+            cmakeOptionsWithMandatory.emplace_back("-GNinja");
+            cmakeOptionsWithMandatory.emplace_back("-DCMAKE_MAKE_PROGRAM=" +
+                                                   Paths::getNinja().string());
+            cmakeOptionsWithMandatory.emplace_back("-DCMAKE_C_COMPILER=" +
+                                                   Paths::getUTBotClang().string());
+            cmakeOptionsWithMandatory.emplace_back("-DCMAKE_CXX_COMPILER=" +
+                                                   Paths::getUTBotClangPP().string());
+#endif
             cmakeOptionsWithMandatory.emplace_back("..");
 
             ShellExecTask::ExecutionParameters cmakeParams(
@@ -97,7 +113,38 @@ UserProjectConfiguration::RunProjectConfigurationCommands(const fs::path &buildD
             ShellExecTask::ExecutionParameters bearMakeParams(
                     Paths::getBear(), {Paths::getMake(), MakefileUtils::threadFlag(), "--always-make"});
 
+            // Building is not what produces the database on Windows -- the
+            // file API already answered that -- but the artifacts the link
+            // commands name have to exist for anything to be linked against.
+            ShellExecTask::ExecutionParameters buildParams(
+                    Paths::getCMake(), {"--build", "."});
+
             fs::path cmakeListsPath = getCmakeListsPath(buildDirPath);
+#ifdef _WIN32
+            // Bear is how the two build databases are collected everywhere
+            // else: it interposes on exec and watches a real build go past.
+            // That is an ELF loader trick, so on Windows the same information
+            // has to be asked for rather than observed -- CMake's file API
+            // reports it, and CMakeFileApi joins that with the compile
+            // commands CMake writes anyway. See CMakeFileApi.h.
+            //
+            // The cost is that a project has to be a CMake project here. A
+            // hand-written build script leaves nothing to ask.
+            if (!fs::exists(cmakeListsPath)) {
+                throw std::runtime_error(
+                        "No CMakeLists.txt in " + cmakeListsPath.parent_path().string() +
+                        ". On Windows the build database comes from CMake, so a project "
+                        "configured any other way cannot be imported.");
+            }
+            // Before cmake, not after: the query is a file cmake looks for
+            // while it generates.
+            CMakeFileApi::writeQuery(buildDirPath);
+            LOG_S(INFO) << "Configure cmake project";
+            RunProjectConfigurationCommand(buildDirPath, cmakeParams, projectContext, writer);
+            LOG_S(INFO) << "Build the project";
+            RunProjectConfigurationCommand(buildDirPath, buildParams, projectContext, writer);
+            CMakeFileApi::writeLinkCommands(buildDirPath);
+#else
             if (fs::exists(cmakeListsPath)) {
                 LOG_S(INFO) << "Configure cmake project";
                 RunProjectConfigurationCommand(buildDirPath, cmakeParams, projectContext, writer);
@@ -107,6 +154,7 @@ UserProjectConfiguration::RunProjectConfigurationCommands(const fs::path &buildD
             }
             LOG_S(INFO) << "Configure make project";
             RunProjectConfigurationCommand(buildDirPath, bearMakeParams, projectContext, writer);
+#endif
         }
         writer.writeResponse(ProjectConfigStatus::IS_OK);
     } catch (const std::exception &e) {

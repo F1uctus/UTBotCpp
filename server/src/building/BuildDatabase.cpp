@@ -129,10 +129,17 @@ namespace {
             }
             if (StringUtils::startsWith(argument, linkFlag)) {
                 std::string libraryName = argument.substr(linkFlag.length());
-                std::string archiveFile = "lib" + libraryName + ".a";
-                std::string sharedObjectFile = "lib" + libraryName + ".so";
-                libraryNames.emplace(sharedObjectFile, argument);
-                libraryNames.emplace(archiveFile, argument);
+                // -lfoo names a library, not a file, and every toolchain spells
+                // the file differently: libfoo.a and libfoo.so where the ABI is
+                // ELF, foo.lib and foo.dll where it is MSVC. Which one exists
+                // is settled later by looking; offering all four costs nothing
+                // and is what makes -l resolve at all on Windows.
+                for (const std::string &candidate : { "lib" + libraryName + ".a",
+                                                      "lib" + libraryName + ".so",
+                                                      libraryName + ".lib",
+                                                      libraryName + ".dll" }) {
+                    libraryNames.emplace(candidate, argument);
+                }
             }
         }
         return libraryNames;

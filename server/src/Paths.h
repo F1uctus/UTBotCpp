@@ -294,17 +294,27 @@ namespace Paths {
 
     utbot::Language getSourceLanguage(const fs::path &path);
 
+    // Both spellings, on both platforms. What a build artifact is called is
+    // decided by the toolchain that produced it, not by the machine reading
+    // the build database: a project configured by CMake against the MSVC ABI
+    // writes .obj and .lib, while the bitcode UTBot produces for the same
+    // project is .o whatever the platform. Accepting only one of the two makes
+    // half of a Windows project invisible to the build database, and the names
+    // do not collide, so there is nothing to lose by accepting both.
     static inline bool isObjectFile(const fs::path &path) {
-        return path.extension() == ".o";
+        const auto extension = path.extension().string();
+        return extension == ".o" || extension == ".obj";
     }
 
     static inline bool isStaticLibraryFile(const fs::path &path) {
-        return path.extension() == ".a";
+        const auto extension = path.extension().string();
+        return extension == ".a" || extension == ".lib";
     }
 
     static inline bool isSharedLibraryFile(const fs::path &path) {
         auto candidate = CompilationUtils::removeSharedLibraryVersion(path);
-        return candidate.extension() == ".so";
+        const auto extension = candidate.extension().string();
+        return extension == ".so" || extension == ".dll";
     }
 
     static inline bool isLibraryFile(const fs::path &path) {
