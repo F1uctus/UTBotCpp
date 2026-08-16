@@ -1080,6 +1080,51 @@ jobs:
           $env:PATH = $savedPath
           Move-Item -LiteralPath $moved -Destination $env:STAGE
 
+      - name: Measure what the distribution still needs from the machine
+        run: |
+          # The distribution is meant to be copied onto a clean Windows and
+          # work. Everything UTBot spawns is inside it -- but the clang it
+          # spawns targets the MSVC ABI, and that toolchain's headers and
+          # import libraries are not LLVM's to ship.
+          #
+          # This runner has Visual Studio, so a clean machine cannot be
+          # simulated by deleting environment variables: clang finds VS through
+          # the registry as well. What can be measured is where the include
+          # paths it chooses actually point. Any that leave the distribution is
+          # something the target machine would have to provide itself.
+          $moved = $env:STAGE
+          $clang = Join-Path $moved 'install\bin\clang.exe'
+          $probe = Join-Path $env:RUNNER_TEMP 'sysrootprobe'
+          New-Item -ItemType Directory -Path $probe -Force | Out-Null
+          @('#include <stdio.h>', 'int main(void) { printf("hi"); return 0; }') |
+            Set-Content -LiteralPath (Join-Path $probe 'hello.c') -Encoding ascii
+
+          $verbose = & $clang -v -c (Join-Path $probe 'hello.c') `
+            -o (Join-Path $probe 'hello.o') 2>&1 | Out-String
+          $compiled = $LASTEXITCODE -eq 0
+          Write-Host $verbose
+
+          $external = @()
+          foreach ($line in ($verbose -split "`r?`n")) {
+            $trimmed = $line.Trim()
+            if ($trimmed -notmatch '^[A-Za-z]:\\') { continue }
+            if ($trimmed -like "$moved*") { continue }
+            if ($trimmed -match 'Program Files|Windows Kits|Microsoft Visual Studio') {
+              $external += $trimmed
+            }
+          }
+
+          Write-Host "compiles a stdio.h hello world: $compiled"
+          if ($external) {
+            Write-Host '::warning::The distribution is not self-contained for compiling user code.'
+            Write-Host 'Include paths outside it:'
+            $external | Sort-Object -Unique | ForEach-Object { Write-Host "  $_" }
+            "SELF_CONTAINED_TOOLCHAIN=no" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          } else {
+            Write-Host 'Every include path is inside the distribution.'
+            "SELF_CONTAINED_TOOLCHAIN=yes" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          }
+
       - name: Upload the distribution
         uses: actions/upload-artifact@v4
         with:
