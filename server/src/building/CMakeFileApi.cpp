@@ -91,6 +91,50 @@ namespace CMakeFileApi {
             return objects;
         }
 
+        /**
+         * Where in the index the codemodel reply is named.
+         *
+         * Two shapes, because there are two ways to ask. A stateless query is
+         * an empty file named for the object, and is answered directly under
+         * the client's key. A query.json -- what this asks with, because it is
+         * the form that can report a version it could not satisfy -- is
+         * answered under that file's name, in a list of responses that has to
+         * be searched by kind.
+         */
+        std::string findCodemodelFile(const nlohmann::json &index) {
+            const auto &reply = index.at("reply");
+            if (!reply.contains(CLIENT)) {
+                throw CompilationDatabaseException(
+                        "CMake answered nothing for " + CLIENT +
+                        ". The query has to exist before cmake runs, not after.");
+            }
+            const auto &answered = reply.at(CLIENT);
+            if (answered.contains("query.json")) {
+                const auto &stateful = answered.at("query.json");
+                if (stateful.contains("error")) {
+                    throw CompilationDatabaseException(
+                            "CMake rejected the file API query: " +
+                            stateful.at("error").get<std::string>());
+                }
+                for (const nlohmann::json &response : stateful.at("responses")) {
+                    if (response.contains("error")) {
+                        throw CompilationDatabaseException(
+                                "CMake rejected part of the file API query: " +
+                                response.at("error").get<std::string>());
+                    }
+                    if (response.value("kind", std::string{}) == "codemodel") {
+                        return response.at("jsonFile").get<std::string>();
+                    }
+                }
+            }
+            if (answered.contains("codemodel-v2")) {
+                return answered.at("codemodel-v2").at("jsonFile").get<std::string>();
+            }
+            throw CompilationDatabaseException(
+                    "CMake answered no codemodel for " + CLIENT +
+                    ". The build directory was configured before UTBot asked for one.");
+        }
+
         bool producesABinary(const std::string &type) {
             return type == "EXECUTABLE" || type == "STATIC_LIBRARY" ||
                    type == "SHARED_LIBRARY" || type == "MODULE_LIBRARY";
@@ -122,14 +166,8 @@ namespace CMakeFileApi {
         const fs::path dir = replyDir(buildDirPath);
         const nlohmann::json index = JsonUtils::getJsonFromFile(indexPath);
 
-        const auto &replies = index.at("reply");
-        if (!replies.contains(CLIENT) || !replies.at(CLIENT).contains("codemodel-v2")) {
-            throw CompilationDatabaseException(
-                    "CMake answered no codemodel for " + CLIENT +
-                    ". The query has to exist before cmake runs, not after.");
-        }
-        const nlohmann::json codemodel = JsonUtils::getJsonFromFile(
-                dir / replies.at(CLIENT).at("codemodel-v2").at("jsonFile").get<std::string>());
+        const nlohmann::json codemodel =
+                JsonUtils::getJsonFromFile(dir / findCodemodelFile(index));
 
         const fs::path sourceRoot = codemodel.at("paths").at("source").get<std::string>();
         const fs::path buildRoot = codemodel.at("paths").at("build").get<std::string>();
