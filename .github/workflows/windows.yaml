@@ -342,34 +342,17 @@ jobs:
           "UTBOT_ALL=$(Join-Path $deps 'utbot-all')" |
             Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
-      - name: Lay out the toolchain the server spawns
+      - name: Put llvm-link beside KLEE
         run: |
-          # The server does not link clang or the LLVM tools, it runs them, and
-          # it looks for them beside klee.exe. Copying rather than referencing
-          # the unpacked release keeps the distribution self-contained.
-          $prefix = Join-Path $env:UTBOT_ALL 'install'
-          $bin = Join-Path $prefix 'bin'
-          foreach ($tool in @('clang.exe', 'clang++.exe', 'llvm-link.exe',
-                              'llvm-ar.exe', 'llvm-nm.exe', 'llvm-cov.exe',
-                              'llvm-profdata.exe', 'llvm-objcopy.exe')) {
-            $source = Join-Path $env:LLVM_ROOT "bin\$tool"
-            if (-not (Test-Path -LiteralPath $source)) { throw "missing $source" }
-            Copy-Item -LiteralPath $source -Destination $bin -Force
-          }
-          # clang needs its resource directory -- the builtin headers -- and
-          # finds it relative to the binary.
-          $resource = & (Join-Path $bin 'clang.exe') -print-resource-dir
-          if ($LASTEXITCODE -ne 0) { throw 'clang could not report its resource dir' }
-          Write-Host "clang resource dir: $resource"
-          if (-not (Test-Path -LiteralPath $resource)) {
-            $version = (Get-ChildItem -LiteralPath (Join-Path $env:LLVM_ROOT 'lib\clang') `
-                          -Directory | Select-Object -First 1).Name
-            $from = Join-Path $env:LLVM_ROOT "lib\clang\$version"
-            $to = Join-Path $prefix "lib\clang\$version"
-            New-Item -ItemType Directory -Path (Split-Path -Parent $to) -Force | Out-Null
-            Copy-Item -Recurse -Force $from $to
-            Write-Host "Copied the resource directory to $to"
-          }
+          # The one tool the server still takes from the release it was built
+          # against. Everything else it spawns compiles the user's code and so
+          # comes from the mingw toolchain instead; llvm-link only merges
+          # bitcode, which does not care what a module was compiled for, and
+          # llvm-mingw ships no llvm-link at all.
+          $bin = Join-Path $env:UTBOT_ALL 'install\bin'
+          $source = Join-Path $env:LLVM_ROOT 'bin\llvm-link.exe'
+          if (-not (Test-Path -LiteralPath $source)) { throw "missing $source" }
+          Copy-Item -LiteralPath $source -Destination $bin -Force
 
       - name: Assemble the build tools the distribution carries
         run: |
@@ -1062,15 +1045,15 @@ jobs:
           }
 
           foreach ($required in @('bin\utbot.exe', 'install\bin\klee.exe',
-                                   'install\bin\clang.exe', 'install\bin\clang++.exe',
-                                   'install\bin\llvm-ar.exe', 'install\bin\llvm-link.exe',
-                                   'install\bin\llvm-nm.exe', 'install\bin\llvm-objcopy.exe',
-                                   'install\bin\llvm-cov.exe', 'install\bin\llvm-profdata.exe',
+                                   'install\bin\llvm-link.exe',
                                    'install\bin\cmake.exe', 'install\bin\ninja.exe',
                                    'toolchain\bin\x86_64-w64-mingw32-clang.exe',
                                    'toolchain\bin\x86_64-w64-mingw32-clang++.exe',
-                                   'toolchain\bin\llvm-ar.exe',
+                                   'toolchain\bin\llvm-ar.exe', 'toolchain\bin\llvm-nm.exe',
+                                   'toolchain\bin\llvm-cov.exe', 'toolchain\bin\llvm-profdata.exe',
+                                   'toolchain\bin\llvm-objcopy.exe', 'toolchain\bin\ld.lld.exe',
                                    'toolchain\x86_64-w64-mingw32\lib\libucrt.a',
+                                   'toolchain\x86_64-w64-mingw32\lib\libc++.a',
                                    'install\include\klee\klee.h',
                                    'bin\make.exe', 'bin\sh.exe', 'bin\mkdir.exe',
                                    'bin\mv.exe', 'bin\rm.exe',
