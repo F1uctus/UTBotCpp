@@ -12,22 +12,16 @@ name: Windows
 # Prebuilt LLVM is linked rather than built: building LLVM and Clang from source
 # does not fit in an Actions budget.
 
+# Started by hand only. A full run sits close to the job limit, so letting every
+# commit queue one burned the Actions budget on iterations that were not worth a
+# Windows runner. Start it with: gh workflow run windows.yaml --ref <branch>
 on:
-  push:
-    branches:
-      - win-native
-      - 'ci/**'
-  pull_request:
-    branches:
-      - win-native
-      - main
   workflow_dispatch:
 
 concurrency:
-  # A push to ci/** and the pull request created from that branch describe the
-  # same source tree. Give both events one key so they do not occupy two Windows
-  # runners at the same time.
-  group: windows-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  # A second dispatch of the same ref supersedes the first rather than taking a
+  # second Windows runner.
+  group: windows-${{ github.workflow }}-${{ github.ref_name }}
   cancel-in-progress: true
 
 env:
