@@ -368,7 +368,7 @@ export class UtbotWizardPanel {
 
             // vars
             {param: 'os', value: os.platform()},
-            {param: 'projectDir', value: defcfg.DefaultConfigValues.toWSLPathOnWindows(vsUtils.getProjectDirByOpenedFile().fsPath)},
+            {param: 'projectDir', value: vsUtils.getProjectDirByOpenedFile().fsPath},
             {param: 'defaultGRPCPort', value: defcfg.DefaultConfigValues.DEFAULT_GRPC_PORT.toString()},
             {param: 'defaultSFTPPort', value: defcfg.DefaultConfigValues.DEFAULT_SFTP_PORT.toString()},
             {param: 'serverHost', value: vsUtils.getFromSftpConfig("host")},

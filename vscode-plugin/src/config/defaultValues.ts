@@ -4,7 +4,6 @@ import * as vsUtils from '../utils/vscodeUtils';
 import {Prefs} from './prefs';
 import * as pathUtils from '../utils/pathUtils';
 import {isIP} from 'net';
-import {isWin32} from "../utils/utils";
 
 export class DefaultConfigValues {
     public static readonly DEFAULT_HOST = "localhost";
@@ -18,15 +17,6 @@ export class DefaultConfigValues {
     public static readonly DEFAULT_TEST_DIR_NAME = "tests";
 
     public static readonly DEFAULT_CMAKE_OPTIONS = ['-DCMAKE_EXPORT_COMPILE_COMMANDS=ON', '-DCMAKE_EXPORT_LINK_COMMANDS=ON'];
-
-    public static toWSLPathOnWindows(path: string): string {
-        if (!isWin32()) {
-            return path;
-        }
-        return path
-            .replace(/^(\w):|\\+/g, '/$1')
-            .replace(/^\//g, '/mnt/');
-    }
 
     public static hasConfiguredRemotePath(): boolean {
         return Prefs.getRemotePath().length !== 0;
@@ -86,7 +76,11 @@ export class DefaultConfigValues {
                     remotePath = sftpRemotePath;
                 }
             } else {
-                remotePath = DefaultConfigValues.toWSLPathOnWindows(vsUtils.getProjectDirByOpenedFile().fsPath);
+                // Nothing to inherit from, so the server is the one on this
+                // machine and opens the project where the editor already has
+                // it. This was a /mnt/c rewrite back when the only server a
+                // Windows editor could reach lived inside WSL.
+                remotePath = vsUtils.getProjectDirByOpenedFile().fsPath;
             }
         }
         return remotePath;

@@ -8,7 +8,6 @@ import * as vsUtils from '../utils/vscodeUtils';
 import * as defcfg from './defaultValues';
 import * as Randomstring from 'randomstring';
 import {SettingsContext} from '../proto-ts/testgen_pb';
-import {isWin32} from '../utils/utils';
 import {ErrorMode} from '../proto-ts/testgen_pb';
 
 const { logger } = ExtensionLogger;
@@ -59,9 +58,24 @@ export class Prefs {
         return host === '127.0.0.1' || host === 'localhost';
     }
 
+    /**
+     * Whether the server sees a different filesystem than the editor does.
+     *
+     * When it does, paths have to be translated in both directions and the
+     * generated code has to travel over the wire. When it does not, both are
+     * pure overhead, and a mistranslated path is a file the server cannot open.
+     *
+     * This used to answer yes on Windows whatever the settings said, from when
+     * the only server a Windows editor could reach was one in WSL or on another
+     * machine. There is a native utbot.exe now, so the question is the same one
+     * as everywhere else: same host, and the project in the same place.
+     */
     public static isRemoteScenario(): boolean {
-        return !(this.isLocalHost() && this.getRemotePath() === vsUtils.getProjectDirByOpenedFile().fsPath)
-            || isWin32();
+        if (!this.isLocalHost()) {
+            return true;
+        }
+        return !pathUtils.samePath(this.getRemotePath(),
+                                   vsUtils.getProjectDirByOpenedFile().fsPath);
     }
 
     /**

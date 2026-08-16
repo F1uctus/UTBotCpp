@@ -34,6 +34,27 @@ export function substituteLocalPath(remoteFilePath: string): string {
     return localFilePath;
 }
 
+/**
+ * Bring a path to a form two spellings of the same location agree on.
+ *
+ * On Windows that is three things at once: either slash is a separator, the
+ * filesystem does not distinguish case, and the drive letter gets written both
+ * ways. VS Code hands out `d:\Dev\proj` while a setting is typed `D:/Dev/proj`,
+ * and neither is more correct than the other.
+ */
+export function normalizeForComparison(anyPath: string): string {
+    let normalized = path.posix.normalize(anyPath.replace(/\\/g, '/')).replace(/\/+$/, '');
+    if (isWin32()) {
+        normalized = normalized.toLowerCase();
+    }
+    return normalized;
+}
+
+/** Whether two paths name the same place, however each was spelled. */
+export function samePath(left: string, right: string): boolean {
+    return normalizeForComparison(left) === normalizeForComparison(right);
+}
+
 export function normalizeRawPosixPath(posixPath: string): string {
     posixPath = path.posix.normalize(posixPath);
     posixPath = posixPath.replace(/\/+$/, '');

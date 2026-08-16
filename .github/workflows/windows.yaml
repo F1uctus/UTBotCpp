@@ -60,6 +60,35 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "checking out $module failed" }
           }
 
+      - name: Build the VS Code extension
+        run: |
+          # Early, and before the hour of C++ ahead of it: this is the half of
+          # the product the user actually drives, and a mistake here should not
+          # cost a full build to find out about.
+          Push-Location (Join-Path $env:GITHUB_WORKSPACE 'vscode-plugin')
+
+          # npm install rather than npm ci: package-lock.json is not tracked.
+          & npm install --no-audit --no-fund
+          if ($LASTEXITCODE -ne 0) { throw 'npm install failed' }
+
+          # The client's gRPC stubs are generated from the same .proto the
+          # server compiles, so the two cannot drift.
+          & "${env:COMSPEC}" /c "protoc.bat ..\server\proto src\proto-ts"
+          foreach ($stub in @('src\proto-ts\testgen_grpc_pb.js', 'src\proto-ts\testgen_pb.js')) {
+            if (-not (Test-Path -LiteralPath $stub)) { throw "protoc produced no $stub" }
+          }
+
+          # vsce runs vscode:prepublish, which lints and type-checks, so this
+          # step is also the extension's compile check.
+          $vsix = Join-Path $env:RUNNER_TEMP 'utbotcpp.vsix'
+          & npx --yes @vscode/vsce@latest package --out $vsix
+          if ($LASTEXITCODE -ne 0) { throw 'packaging the extension failed' }
+          Pop-Location
+
+          $size = [math]::Round((Get-Item -LiteralPath $vsix).Length / 1MB, 2)
+          Write-Host "Packaged the extension: $size MB"
+          "EXTENSION_VSIX=$vsix" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
       - name: Set up the MSVC toolchain
         run: |
           # vcvars64.bat is the only supported way to get a working MSVC
@@ -764,42 +793,47 @@ jobs:
         timeout-minutes: 30
         run: |
           # Generation writes makefiles for the user to build and run the tests
-          # with. This is the first thing on Windows that actually drives them,
-          # and it drives them through the make and shell the distribution
-          # carries rather than anything installed on the machine.
+          # with. This is the first thing on Windows that drives them, and it
+          # drives them through the make and shell the distribution carries
+          # rather than through anything installed on the machine.
           $fixture = $env:GENERATION_FIXTURE
           if (-not $fixture) { throw 'the generation step recorded no fixture' }
           $utbot = Join-Path $env:UTBOT_ALL 'bin\utbot.exe'
+          $logs = Join-Path $env:RUNNER_TEMP 'runlogs'
+          New-Item -ItemType Directory -Path $logs -Force | Out-Null
 
-          # A generated makefile, before anything runs it: the recipes have to
-          # name a shell, or make would hand them to cmd.exe.
-          $makefiles = @(Get-ChildItem -LiteralPath (Join-Path $fixture 'tests') `
-                           -Recurse -Filter '*.mk' -File -ErrorAction SilentlyContinue)
-          if (-not $makefiles) {
-            $makefiles = @(Get-ChildItem -LiteralPath (Join-Path $fixture 'tests') `
-                             -Recurse -File | Where-Object { $_.Name -like '*akefile*' })
-          }
+          # Look at a generated makefile before anything runs it: without a
+          # SHELL of its own make would handed these recipes to cmd.exe.
+          $makefiles = @(Get-ChildItem -LiteralPath $fixture -Recurse -File |
+                         Where-Object { $_.Name -like '*akefile*' -or $_.Extension -eq '.mk' })
           if (-not $makefiles) { throw 'generation produced no makefiles' }
           $sample = Get-Content -Raw -LiteralPath $makefiles[0].FullName
           if ($sample -notmatch 'SHELL\s*=') {
             Write-Host $sample
-            throw 'the generated makefile does not set SHELL'
+            throw "$($makefiles[0].Name) does not set SHELL"
           }
-          Write-Host "Makefiles: $($makefiles.Count), first is $($makefiles[0].Name)"
+          Write-Host "Makefiles: $($makefiles.Count); checked $($makefiles[0].Name)"
 
-          # Build and run, without coverage first: it isolates a failure in the
-          # build from a failure in the coverage tooling that reads its output.
-          & $utbot run -p $fixture -b build -t tests project --no-coverage
-          if ($LASTEXITCODE -ne 0) { throw "utbot run failed ($LASTEXITCODE)" }
+          # utbot run reports a failed run by logging it, not by its exit
+          # status, so the output is the thing to test.
+          function Invoke-Run([string[]] $extra, [string] $what) {
+            $output = & $utbot --log $logs -v info run `
+              -p $fixture -b build -t tests project @extra 2>&1 | Out-String
+            Write-Host $output
+            if ($output -notmatch 'Successfully ran tests') {
+              Get-ChildItem -LiteralPath $logs -Recurse -File -ErrorAction SilentlyContinue |
+                ForEach-Object {
+                  Write-Host "----- $($_.FullName) -----"
+                  Get-Content -LiteralPath $_.FullName -Tail 120
+                }
+              throw "$what did not report a successful run"
+            }
+          }
 
-          $exes = @(Get-ChildItem -LiteralPath $fixture -Recurse -Filter '*_test.exe' `
-                      -File -ErrorAction SilentlyContinue)
-          if (-not $exes) { throw 'no test executable was produced' }
-          Write-Host "Test binaries: $($exes.Name -join ', ')"
-
-          # Now with coverage, which is what the extension asks for.
-          & $utbot run -p $fixture -b build -t tests project
-          if ($LASTEXITCODE -ne 0) { throw "utbot run with coverage failed ($LASTEXITCODE)" }
+          # Without coverage first: it separates a failure to build and run
+          # from a failure in the coverage tooling that reads the result.
+          Invoke-Run @('--no-coverage') 'utbot run --no-coverage'
+          Invoke-Run @() 'utbot run with coverage'
           Write-Host 'the generated tests build, run and report coverage'
 
       - name: Package the portable distribution
@@ -837,6 +871,13 @@ jobs:
           # access_private is header-only and is included by generated tests
           # that reach a class's private members.
           Copy-Item -Recurse -Force (Join-Path $env:UTBOT_ALL 'access_private') $stage
+
+          # The extension, so that a machine with this directory on it has
+          # both halves and needs nothing from a marketplace.
+          $vscodeDir = Join-Path $stage 'vscode'
+          New-Item -ItemType Directory -Path $vscodeDir -Force | Out-Null
+          Copy-Item -LiteralPath $env:EXTENSION_VSIX `
+            -Destination (Join-Path $vscodeDir 'utbotcpp.vsix') -Force
 
           # Runtime DLLs. gRPC and protobuf are linked statically with /MT to
           # match LLVM, while Z3 is shipped as a DLL.
@@ -877,6 +918,7 @@ jobs:
                                    'gtest\googletest\src\gtest-all.cc',
                                    'gtest\googletest\src\gtest_main.cc',
                                    'access_private\include\access_private.hpp',
+                                   'vscode\utbotcpp.vsix',
                                    'bin\msvcp140.dll', 'bin\vcruntime140.dll')) {
             $path = Join-Path $stage $required
             if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
