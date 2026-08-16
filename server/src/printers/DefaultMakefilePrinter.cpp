@@ -27,11 +27,16 @@ void DefaultMakefilePrinter::declareShell() {
     // recipes and splits command lines the Unix way.
     ss << StringUtils::stringFormat("SHELL = %s\n", Paths::getShell());
     ss << ".SHELLFLAGS = -c\n";
-    // mkdir, mv and rm are spelled unqualified in the recipes, so the busybox
-    // copies that answer to those names have to be findable. Prepending rather
-    // than replacing leaves the user's own tools reachable behind them.
-    ss << StringUtils::stringFormat("export PATH := %s;$(PATH)\n",
-                                    Paths::getShell().parent_path());
+    // Two directories have to be reachable while a recipe runs. The first
+    // holds the busybox copies, because mkdir, mv and rm are spelled
+    // unqualified in the recipes. The second holds the compiler runtime DLLs:
+    // ASan on Windows is dynamic, so a test built with it loads
+    // libclang_rt.asan_dynamic at startup and dies at once if it is not on the
+    // path. Prepending rather than replacing leaves the user's own tools
+    // reachable behind both.
+    ss << StringUtils::stringFormat("export PATH := %s;%s;$(PATH)\n",
+                                    Paths::getShell().parent_path(),
+                                    Paths::getUTBotToolchainDir() / "bin");
 #endif
 }
 
