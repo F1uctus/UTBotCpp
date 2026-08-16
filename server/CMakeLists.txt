@@ -64,6 +64,24 @@ if (NOT "$ENV{UTBOT_INSTALL_DIR}" STREQUAL "")
     list(APPEND CMAKE_PREFIX_PATH $ENV{UTBOT_INSTALL_DIR})
 endif ()
 find_package(Clang REQUIRED)
+
+# Official Windows LLVM archives record the DIA SDK path from the machine that
+# produced the archive (currently VS 2022 Enterprise).  Replace that stale path
+# with the DIA SDK installed alongside the compiler used for this build.
+if (WIN32 AND TARGET LLVMDebugInfoPDB AND NOT "$ENV{VSINSTALLDIR}" STREQUAL "")
+    set(UTBOT_DIAGUIDS "$ENV{VSINSTALLDIR}/DIA SDK/lib/amd64/diaguids.lib")
+    if (EXISTS "${UTBOT_DIAGUIDS}")
+        get_target_property(UTBOT_PDB_LIBRARIES LLVMDebugInfoPDB INTERFACE_LINK_LIBRARIES)
+        foreach (UTBOT_PDB_LIBRARY IN LISTS UTBOT_PDB_LIBRARIES)
+            if (UTBOT_PDB_LIBRARY MATCHES "DIA SDK.*/diaguids\\.lib$")
+                list(REMOVE_ITEM UTBOT_PDB_LIBRARIES "${UTBOT_PDB_LIBRARY}")
+            endif ()
+        endforeach ()
+        list(PREPEND UTBOT_PDB_LIBRARIES "${UTBOT_DIAGUIDS}")
+        set_property(TARGET LLVMDebugInfoPDB PROPERTY
+                INTERFACE_LINK_LIBRARIES "${UTBOT_PDB_LIBRARIES}")
+    endif ()
+endif ()
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${LLVM_CMAKE_DIR}")
 include(AddLLVM)
 include_directories(${LLVM_INCLUDE_DIRS})

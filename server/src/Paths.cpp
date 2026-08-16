@@ -105,6 +105,7 @@ namespace Paths {
         std::string result = path.string();
         StringUtils::replaceAll(result, '.', '_');
         StringUtils::replaceAll(result, '/', '_');
+        StringUtils::replaceAll(result, '\\', '_');
         StringUtils::replaceAll(result, '-', '_');
         return result;
     }

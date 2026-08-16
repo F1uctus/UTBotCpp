@@ -33,11 +33,24 @@ void CLIUtils::setupLogger(const std::string &logPath,
     }
 
     CLIUtils::setOptPath(logPath, Paths::logPath);
+    fs::create_directories(Paths::getBaseLogDir());
     const fs::path symLink = Paths::getSymLinkPathToLogLatest();
     const std::string logfile_path_string = std::string(Paths::getUtbotLogAllFilePath());
     loguru::add_file(logfile_path_string.data(), loguru::Append, loguru::Verbosity_MAX);
-    std::filesystem::remove(symLink.string());
-    std::filesystem::create_symlink(logfile_path_string, symLink.string());
+    std::error_code linkError;
+    std::filesystem::remove(symLink.string(), linkError);
+    linkError.clear();
+#ifdef _WIN32
+    // Creating symbolic links on Windows normally requires an elevated process
+    // or Developer Mode. A hard link has the same useful semantics here and
+    // works for an ordinary portable installation.
+    std::filesystem::create_hard_link(logfile_path_string, symLink.string(), linkError);
+#else
+    std::filesystem::create_symlink(logfile_path_string, symLink.string(), linkError);
+#endif
+    if (linkError) {
+        LOG_S(WARNING) << "Could not create the latest log link: " << linkError.message();
+    }
 
     setStderrVerbosity(verbosity);
 }
