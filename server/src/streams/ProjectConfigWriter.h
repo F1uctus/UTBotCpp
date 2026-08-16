@@ -12,8 +12,12 @@ public:
         : ServerWriter(writer) {
     }
 
-    void writeResponse(testsgen::ProjectConfigStatus status,
-                       std::optional<std::string> const &message = std::nullopt) const;
+    /// Virtual because the configuration is handed a reference to this type
+    /// and the CLI substitutes a writer that reports to a terminal instead.
+    virtual void writeResponse(testsgen::ProjectConfigStatus status,
+                               std::optional<std::string> const &message = std::nullopt) const;
+
+    virtual ~ProjectConfigWriter() = default;
 };
 
 

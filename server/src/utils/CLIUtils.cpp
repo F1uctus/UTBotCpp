@@ -1,13 +1,15 @@
 #include "CLIUtils.h"
 
-#include "building/UserProjectConfiguration.h"
-#include "streams/CLIProjectConfigWriter.h"
-
 #include "GenerationUtils.h"
 #include "Paths.h"
+#include "ProjectContext.h"
+#include "building/UserProjectConfiguration.h"
 #include "commands/Commands.h"
+#include "streams/CLIProjectConfigWriter.h"
 
 #include "loguru.h"
+
+#include <cstdlib>
 
 using namespace GenerationUtils;
 using namespace Commands;
@@ -210,9 +212,11 @@ void CLIUtils::parse(int argc, char **argv, CLI::App &app) {
                 fs::path(utbotProjectContext.projectPath), utbotProjectContext,
                 configureCmakeOptions, writer);
         if (writer.failed()) {
-            // The configuration reports itself through statuses, so nothing
-            // above would have noticed. Say so in the only way a shell reads.
-            throw CLI::RuntimeError(1);
+            // The configuration reports itself through statuses, so returning
+            // normally would call a failed import a success. main only catches
+            // CLI::ParseError, so throwing anything here terminates instead of
+            // exiting; the atexit that resets the terminal colour still runs.
+            std::exit(1);
         }
 
     } else if (app.got_subcommand(mainCommands.getRunTestsCommand())) {

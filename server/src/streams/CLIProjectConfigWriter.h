@@ -16,7 +16,7 @@ public:
     CLIProjectConfigWriter() : ProjectConfigWriter(nullptr) {}
 
     void writeResponse(testsgen::ProjectConfigStatus status,
-                       std::optional<std::string> const &message = std::nullopt) const;
+                       std::optional<std::string> const &message = std::nullopt) const override;
 
     /// Whether any status so far means the project was not imported.
     [[nodiscard]] bool failed() const { return sawFailure; }
