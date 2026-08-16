@@ -198,11 +198,23 @@ namespace Paths {
     }
 
     fs::path getLdGold() {
+#ifdef _WIN32
+        return userToolchainUtility("ld.lld");
+#else
         return getUTBotDebsInstallDir() / "usr" / "bin" / "ld.gold";
+#endif
     }
 
     fs::path getLd() {
+        // Relinking a project's executable as a library goes through the
+        // linker directly rather than the compiler driver. There is no
+        // system ld on Windows to reach for, and ld.lld speaks the GNU
+        // linker's options, which is what the flags are translated into.
+#ifdef _WIN32
+        return userToolchainUtility("ld.lld");
+#else
         return getUTBotDebsInstallDir() / "usr" / "bin" / "ld";
+#endif
     }
 
     fs::path getAsanLibraryPath() {
