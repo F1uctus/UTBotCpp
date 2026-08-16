@@ -74,7 +74,16 @@ export class Prefs {
         if (!this.isLocalHost()) {
             return true;
         }
-        return !pathUtils.samePath(this.getRemotePath(),
+        const remotePath = this.getRemotePath();
+        if (remotePath.length === 0) {
+            // Nothing was configured, and the server answers on this machine.
+            // The setting exists to say where the project lives on the far
+            // side of a connection; with no far side there is nowhere else it
+            // could be. Treating an unset value as "somewhere unknown" made
+            // the out-of-the-box case the broken one.
+            return false;
+        }
+        return !pathUtils.samePath(remotePath,
                                    vsUtils.getProjectDirByOpenedFile().fsPath);
     }
 
@@ -182,6 +191,11 @@ export class Prefs {
 
     public static getRemoteRoot(): string {
         const root = this.getAsset(Prefs.REMOTE_PATH_PREF);
+        if (root.length === 0) {
+            // Unset means the server shares this filesystem, so the project
+            // root is the one the editor already has.
+            return vsUtils.getProjectDirByOpenedFile().fsPath;
+        }
         return pathUtils.normalizeRawPosixPath(root);
     }
 
