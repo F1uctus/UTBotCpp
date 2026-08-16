@@ -419,7 +419,15 @@ namespace printer {
     }
     fs::path NativeMakefilePrinter::getTestExecutablePath(const fs::path &sourcePath) const {
         fs::path recompiledFile = Paths::getRecompiledFile(testGen->projectContext, sourcePath);
-        return Paths::mangleExtensions(recompiledFile);
+        fs::path mangled = Paths::mangleExtensions(recompiledFile);
+#ifdef _WIN32
+        // The name has to be the one the linker will actually write. A mingw
+        // driver given -o with no extension appends .exe, and the makefile
+        // would then have a target that never appears: every build would relink
+        // and the run target would look for a file that is not there.
+        mangled = Paths::addExtension(mangled, ".exe");
+#endif
+        return mangled;
     }
 
     NativeMakefilePrinter::NativeMakefilePrinter(const NativeMakefilePrinter &baseMakefilePrinter,
@@ -638,10 +646,16 @@ namespace printer {
 
     fs::path NativeMakefilePrinter::getSharedLibrary(const fs::path &filePath) {
         fs::path output = CompilationUtils::removeSharedLibraryVersion(filePath);
-        fs::path sharedLibrary = Paths::isSharedLibraryFile(output)
-                                     ? output
-                                     : Paths::addPrefix(Paths::addExtension(output, ".so"), "lib");
-        return sharedLibrary;
+        if (Paths::isSharedLibraryFile(output)) {
+            return output;
+        }
+#ifdef _WIN32
+        // A DLL, and without the lib prefix: that is what the linker produces
+        // and what the loader will look for.
+        return Paths::addExtension(output, ".dll");
+#else
+        return Paths::addPrefix(Paths::addExtension(output, ".so"), "lib");
+#endif
     }
 
     void NativeMakefilePrinter::addStubs(const CollectionUtils::FileSet &stubsSet) {
