@@ -20,6 +20,9 @@ public:
 
     void comment(std::string const &message);
 
+    /// Point make at a POSIX shell where the platform has none by default.
+    void declareShell();
+
     virtual void declareVariable(std::string const &name, std::string const &value);
 
     void declareAction(std::string const &name);

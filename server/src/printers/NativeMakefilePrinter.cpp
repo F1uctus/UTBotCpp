@@ -596,8 +596,9 @@ namespace printer {
                 const fs::path relativeDir = getRelativePath(linkCommand.getDirectory());
 
                 if (isExecutable && !transformExeToLib) {
-                    return stringFormat("%s && objcopy --redefine-sym main=main__ %s",
+                    return stringFormat("%s && %s --redefine-sym main=main__ %s",
                                         linkCommand.toStringWithChangingDirectoryToNew(relativeDir),
+                                        getRelativePathForLinker(Paths::getObjcopy()),
                                         linkCommand.getOutput().string());
                 }
                 return linkCommand.toStringWithChangingDirectoryToNew(relativeDir);

@@ -54,14 +54,29 @@ namespace fs {
             return path(path_.lexically_normal());
         }
 
+        /// Always the generic form: '/' as the separator, on both platforms.
+        ///
+        /// Every string this class hands out is one of three things -- a
+        /// makefile, a compile command, or a path sent to the client -- and a
+        /// backslash is wrong in all of them. In a makefile it continues the
+        /// line; in a compile command the shell eats it; the extension joins
+        /// what it receives with POSIX semantics. std::filesystem keeps the
+        /// native form internally and accepts either on input, so nothing is
+        /// lost by speaking generic everywhere above it.
         std::string string() const {
+            return path_.generic_string();
+        }
+
+        /// The native spelling, for the rare caller that has to show the user a
+        /// path in the platform's own form.
+        std::string native_string() const {
             return path_.string();
         }
 
         friend path operator/(path a, const path& b);
 
         operator std::string() const {
-            return path_.string();
+            return string();
         }
 
         path& operator/=(const path& p) {
@@ -86,7 +101,7 @@ namespace fs {
         const char * c_str() const {
             // The server's process, LLVM and formatting APIs consume narrow strings even on
             // Windows, where std::filesystem::path::c_str() returns const wchar_t *.
-            stringCache_ = path_.string();
+            stringCache_ = string();
             return stringCache_.c_str();
         }
 
@@ -208,7 +223,7 @@ namespace fs {
     template< class CharT, class Traits >
     inline std::basic_ostream<CharT,Traits>&
     operator<<( std::basic_ostream<CharT,Traits>& os, const path& p ) {
-        os << p.path_;
+        os << p.string();
         return os;
     }
 

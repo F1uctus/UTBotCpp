@@ -322,7 +322,7 @@ jobs:
           $bin = Join-Path $prefix 'bin'
           foreach ($tool in @('clang.exe', 'clang++.exe', 'llvm-link.exe',
                               'llvm-ar.exe', 'llvm-nm.exe', 'llvm-cov.exe',
-                              'llvm-profdata.exe')) {
+                              'llvm-profdata.exe', 'llvm-objcopy.exe')) {
             $source = Join-Path $env:LLVM_ROOT "bin\$tool"
             if (-not (Test-Path -LiteralPath $source)) { throw "missing $source" }
             Copy-Item -LiteralPath $source -Destination $bin -Force
@@ -341,6 +341,103 @@ jobs:
             Copy-Item -Recurse -Force $from $to
             Write-Host "Copied the resource directory to $to"
           }
+
+      - name: Assemble the POSIX tools the generated makefiles need
+        run: |
+          # UTBot hands the user makefiles to build and run the tests it wrote,
+          # and their recipes are POSIX: mkdir -p, mv -f, rm -rf, and
+          # "cmd && { cmd; exit $?; }". Windows supplies none of that, so the
+          # distribution carries its own make and its own shell instead of
+          # asking for MSYS or Cygwin on the target machine.
+          $bin = Join-Path $env:UTBOT_ALL 'bin'
+          New-Item -ItemType Directory -Path $bin -Force | Out-Null
+          $deps = Join-Path (Split-Path -Parent $env:GITHUB_WORKSPACE) 'deps'
+          New-Item -ItemType Directory -Path $deps -Force | Out-Null
+
+          # --- GNU make, built here with the same MSVC as the server ---
+          $makeVer = 'make-4.4.1'
+          $tarball = Join-Path $deps "$makeVer.tar.gz"
+          if (-not (Test-Path -LiteralPath $tarball)) {
+            Invoke-WebRequest -Uri "https://ftp.gnu.org/gnu/make/$makeVer.tar.gz" `
+              -OutFile $tarball -UseBasicParsing
+          }
+          $makeSrc = Join-Path $deps $makeVer
+          if (-not (Test-Path -LiteralPath $makeSrc)) {
+            # 7-Zip rather than tar.exe, for the same reason the LLVM release
+            # uses it: bsdtar is pathologically slow on this runner.
+            & 7z.exe x $tarball "-o$deps" -y -bso0 -bsp0
+            if ($LASTEXITCODE -ne 0) { throw 'decompressing make failed' }
+            & 7z.exe x (Join-Path $deps "$makeVer.tar") "-o$deps" -y -bso0 -bsp0
+            if ($LASTEXITCODE -ne 0) { throw 'unpacking make failed' }
+            Remove-Item -LiteralPath (Join-Path $deps "$makeVer.tar") -Force
+          }
+          Push-Location $makeSrc
+          # build_w32.bat defaults to cl.exe and to a 64-bit release build.
+          # Guile only adds a scripting extension nothing here uses.
+          & "${env:COMSPEC}" /c "build_w32.bat --without-guile"
+          $buildStatus = $LASTEXITCODE
+          Pop-Location
+          $builtMake = Join-Path $makeSrc 'WinRel\gnumake.exe'
+          if (-not (Test-Path -LiteralPath $builtMake)) {
+            throw "building make failed ($buildStatus)"
+          }
+          Copy-Item -LiteralPath $builtMake -Destination (Join-Path $bin 'make.exe') -Force
+
+          # --- busybox as the POSIX shell and coreutils ---
+          # Pinned to a versioned file name: the unversioned busybox64.exe is
+          # overwritten in place on every upstream release, so it cannot be
+          # checksummed usefully.
+          $bbFile = 'busybox-w64-FRP-6075-g169694ebd.exe'
+          $bbSha = '07bb1e5b095b00d68a695481f9240879f33c5724b40aa2308f999d54ed78f075'
+          $bbPath = Join-Path $deps $bbFile
+          if (-not (Test-Path -LiteralPath $bbPath)) {
+            Invoke-WebRequest -Uri "https://frippery.org/files/busybox/$bbFile" `
+              -OutFile $bbPath -UseBasicParsing
+          }
+          $actual = (Get-FileHash -LiteralPath $bbPath -Algorithm SHA256).Hash.ToLower()
+          if ($actual -ne $bbSha) { throw "busybox checksum: expected $bbSha, got $actual" }
+          Copy-Item -LiteralPath $bbPath -Destination (Join-Path $bin 'busybox.exe') -Force
+          # busybox chooses its applet from argv[0], so a copy per name is what
+          # makes "mkdir -p" in a recipe resolve. sh.exe carries a second job:
+          # make reads the shell's name to decide whether to quote recipes the
+          # Unix way, and only recognises the usual ones.
+          foreach ($applet in @('sh', 'mkdir', 'mv', 'rm', 'cp', 'cat', 'echo', 'test')) {
+            Copy-Item -LiteralPath $bbPath -Destination (Join-Path $bin "$applet.exe") -Force
+          }
+
+          # --- gtest and access_private, as sources ---
+          # The generated makefiles compile gtest-all.cc and gtest_main.cc
+          # themselves, so the source tree is all that has to be shipped.
+          $gtest = Join-Path $env:UTBOT_ALL 'gtest'
+          if (-not (Test-Path -LiteralPath $gtest)) {
+            & git clone --quiet --depth 1 --branch release-1.10.0 `
+              https://github.com/google/googletest.git $gtest
+            if ($LASTEXITCODE -ne 0) { throw 'cloning googletest failed' }
+          }
+          $accessPrivate = Join-Path $env:UTBOT_ALL 'access_private'
+          if (-not (Test-Path -LiteralPath $accessPrivate)) {
+            & git clone --quiet --depth 1 `
+              https://github.com/martong/access_private.git $accessPrivate
+            if ($LASTEXITCODE -ne 0) { throw 'cloning access_private failed' }
+          }
+
+          # --- prove the pieces work together before anything depends on them ---
+          & (Join-Path $bin 'make.exe') --version | Select-Object -First 1
+          if ($LASTEXITCODE -ne 0) { throw 'the built make does not run' }
+          $probe = Join-Path $env:RUNNER_TEMP 'shellprobe'
+          Remove-Item -LiteralPath $probe -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path $probe -Force | Out-Null
+          $recipe = @(
+            'mkdir -p one/two && echo made > one/two/a',
+            'mv -f one/two/a one/two/b',
+            'test -f one/two/b && echo shell-ok',
+            'rm -rf one'
+          ) -join ' && '
+          $out = & (Join-Path $bin 'sh.exe') -c "cd '$($probe -replace '\\', '/')' && $recipe"
+          if ($LASTEXITCODE -ne 0 -or $out -notmatch 'shell-ok') {
+            throw "the bundled shell cannot run a generated recipe: $out"
+          }
+          Write-Host 'make, sh and the POSIX applets are in place'
 
       - name: Restore the vcpkg downloads
         id: vcpkg-downloads-cache
@@ -663,6 +760,48 @@ jobs:
           "GENERATION_FIXTURE=$fixture" |
             Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
+      - name: Smoke test -- build and run the generated tests
+        timeout-minutes: 30
+        run: |
+          # Generation writes makefiles for the user to build and run the tests
+          # with. This is the first thing on Windows that actually drives them,
+          # and it drives them through the make and shell the distribution
+          # carries rather than anything installed on the machine.
+          $fixture = $env:GENERATION_FIXTURE
+          if (-not $fixture) { throw 'the generation step recorded no fixture' }
+          $utbot = Join-Path $env:UTBOT_ALL 'bin\utbot.exe'
+
+          # A generated makefile, before anything runs it: the recipes have to
+          # name a shell, or make would hand them to cmd.exe.
+          $makefiles = @(Get-ChildItem -LiteralPath (Join-Path $fixture 'tests') `
+                           -Recurse -Filter '*.mk' -File -ErrorAction SilentlyContinue)
+          if (-not $makefiles) {
+            $makefiles = @(Get-ChildItem -LiteralPath (Join-Path $fixture 'tests') `
+                             -Recurse -File | Where-Object { $_.Name -like '*akefile*' })
+          }
+          if (-not $makefiles) { throw 'generation produced no makefiles' }
+          $sample = Get-Content -Raw -LiteralPath $makefiles[0].FullName
+          if ($sample -notmatch 'SHELL\s*=') {
+            Write-Host $sample
+            throw 'the generated makefile does not set SHELL'
+          }
+          Write-Host "Makefiles: $($makefiles.Count), first is $($makefiles[0].Name)"
+
+          # Build and run, without coverage first: it isolates a failure in the
+          # build from a failure in the coverage tooling that reads its output.
+          & $utbot run -p $fixture -b build -t tests project --no-coverage
+          if ($LASTEXITCODE -ne 0) { throw "utbot run failed ($LASTEXITCODE)" }
+
+          $exes = @(Get-ChildItem -LiteralPath $fixture -Recurse -Filter '*_test.exe' `
+                      -File -ErrorAction SilentlyContinue)
+          if (-not $exes) { throw 'no test executable was produced' }
+          Write-Host "Test binaries: $($exes.Name -join ', ')"
+
+          # Now with coverage, which is what the extension asks for.
+          & $utbot run -p $fixture -b build -t tests project
+          if ($LASTEXITCODE -ne 0) { throw "utbot run with coverage failed ($LASTEXITCODE)" }
+          Write-Host 'the generated tests build, run and report coverage'
+
       - name: Package the portable distribution
         run: |
           $stage = Join-Path $env:RUNNER_TEMP 'utbot-windows-x86_64'
@@ -674,6 +813,30 @@ jobs:
           # headers the generated harness includes, and the clang and LLVM tools
           # the server spawns.
           Copy-Item -Recurse -Force (Join-Path $env:UTBOT_ALL 'install') $stage
+
+          # make, the shell and its applets. The generated makefiles name
+          # these, so the distribution is only usable with them beside it.
+          foreach ($tool in @(Get-ChildItem -LiteralPath (Join-Path $env:UTBOT_ALL 'bin') `
+                                -Filter '*.exe' -File)) {
+            if ($tool.Name -eq 'utbot.exe') { continue }
+            Copy-Item -LiteralPath $tool.FullName -Destination (Join-Path $stage 'bin') -Force
+          }
+
+          # gtest, as sources: the generated makefiles compile gtest-all.cc and
+          # gtest_main.cc themselves. Only the two directories they read are
+          # shipped -- the rest of the checkout is gtest's own test suite.
+          $gtestTo = Join-Path $stage 'gtest\googletest'
+          New-Item -ItemType Directory -Path $gtestTo -Force | Out-Null
+          foreach ($part in @('include', 'src')) {
+            Copy-Item -Recurse -Force `
+              (Join-Path $env:UTBOT_ALL "gtest\googletest\$part") $gtestTo
+          }
+          Copy-Item -Force (Join-Path $env:UTBOT_ALL 'gtest\LICENSE') `
+            (Join-Path $stage 'gtest')
+
+          # access_private is header-only and is included by generated tests
+          # that reach a class's private members.
+          Copy-Item -Recurse -Force (Join-Path $env:UTBOT_ALL 'access_private') $stage
 
           # Runtime DLLs. gRPC and protobuf are linked statically with /MT to
           # match LLVM, while Z3 is shipped as a DLL.
@@ -706,7 +869,14 @@ jobs:
           foreach ($required in @('bin\utbot.exe', 'install\bin\klee.exe',
                                    'install\bin\clang.exe', 'install\bin\clang++.exe',
                                    'install\bin\llvm-ar.exe', 'install\bin\llvm-link.exe',
-                                   'install\bin\llvm-nm.exe', 'install\include\klee\klee.h',
+                                   'install\bin\llvm-nm.exe', 'install\bin\llvm-objcopy.exe',
+                                   'install\bin\llvm-cov.exe', 'install\bin\llvm-profdata.exe',
+                                   'install\include\klee\klee.h',
+                                   'bin\make.exe', 'bin\sh.exe', 'bin\mkdir.exe',
+                                   'bin\mv.exe', 'bin\rm.exe',
+                                   'gtest\googletest\src\gtest-all.cc',
+                                   'gtest\googletest\src\gtest_main.cc',
+                                   'access_private\include\access_private.hpp',
                                    'bin\msvcp140.dll', 'bin\vcruntime140.dll')) {
             $path = Join-Path $stage $required
             if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {

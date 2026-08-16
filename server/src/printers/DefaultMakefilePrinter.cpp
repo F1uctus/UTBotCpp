@@ -1,5 +1,6 @@
 #include "DefaultMakefilePrinter.h"
 
+#include "environment/EnvironmentPaths.h"
 #include "utils/Copyright.h"
 
 namespace printer {
@@ -11,7 +12,27 @@ const std::string DefaultMakefilePrinter::TARGET_FORCE = ".FORCE";
 
 DefaultMakefilePrinter::DefaultMakefilePrinter() {
     writeCopyrightHeader();
+    declareShell();
     declareTarget(TARGET_FORCE, {}, {});
+}
+
+void DefaultMakefilePrinter::declareShell() {
+#ifdef _WIN32
+    // The recipes below are POSIX. Left alone, make on Windows would hand them
+    // to cmd.exe, which has no mkdir -p, no mv -f, and no { ...; } grouping.
+    //
+    // The shipped shell is a busybox copy named sh.exe, and the name is load
+    // bearing twice over: busybox picks its applet from argv[0], and make
+    // decides from the same name that this is a Unix shell and so quotes
+    // recipes and splits command lines the Unix way.
+    ss << StringUtils::stringFormat("SHELL = %s\n", Paths::getShell());
+    ss << ".SHELLFLAGS = -c\n";
+    // mkdir, mv and rm are spelled unqualified in the recipes, so the busybox
+    // copies that answer to those names have to be findable. Prepending rather
+    // than replacing leaves the user's own tools reachable behind them.
+    ss << StringUtils::stringFormat("export PATH := %s;$(PATH)\n",
+                                    Paths::getShell().parent_path());
+#endif
 }
 
 void DefaultMakefilePrinter::comment(std::string const &message) {

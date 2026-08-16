@@ -73,7 +73,26 @@ namespace Paths {
     }
 
     fs::path getMake() {
+#ifdef _WIN32
+        // Windows has no make of its own, so the distribution carries one and
+        // the generated makefiles are driven by that rather than by whatever
+        // the user happens to have on PATH.
+        return getUTBotRootDir() / "bin" / "make";
+#else
         return "make";
+#endif
+    }
+
+    fs::path getShell() {
+#ifdef _WIN32
+        // The recipes are written for a POSIX shell -- mkdir -p, mv -f, rm -rf,
+        // "cmd && { cmd; exit $?; }". The distribution carries a busybox that
+        // dispatches on argv[0], so the copy named sh.exe is a shell; make
+        // recognises the name and quotes recipes the Unix way because of it.
+        return getUTBotRootDir() / "bin" / "sh.exe";
+#else
+        return "/bin/sh";
+#endif
     }
 
     fs::path getUTBotClang() {
@@ -118,6 +137,13 @@ namespace Paths {
 
     fs::path getLLVMLink() {
         return getUTBotInstallDir() / "bin" / "llvm-link";
+    }
+
+    fs::path getObjcopy() {
+        // llvm-objcopy rather than binutils objcopy: it is part of the LLVM the
+        // distribution already carries, so it needs nothing installed and
+        // behaves the same on both platforms.
+        return getUTBotInstallDir() / "bin" / "llvm-objcopy";
     }
 
     fs::path getAr() {
