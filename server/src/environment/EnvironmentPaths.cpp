@@ -44,6 +44,47 @@ namespace Paths {
         return getUTBotRootDir() / "install";
     }
 
+    fs::path getUTBotToolchainDir() {
+        return getUTBotRootDir() / "toolchain";
+    }
+
+    namespace {
+        /**
+         * A tool from the toolchain that compiles the user's code.
+         *
+         * On Windows that is a separate tree from the install prefix, and the
+         * separation is not tidiness. The clang in a clang+llvm-*-windows-msvc
+         * release targets the MSVC ABI, and its headers and import libraries
+         * belong to Visual Studio, which LLVM cannot ship -- so a machine
+         * without Visual Studio cannot compile so much as #include <stdio.h>
+         * with it, and the distribution would not be portable at all.
+         *
+         * llvm-mingw is the same LLVM 22.1.8, built for the mingw-w64 target
+         * and carrying its own CRT, libc++ and headers. Same version matters:
+         * KLEE reads bitcode from its own LLVM or older, and it is that LLVM.
+         *
+         * clang finds its sysroot relative to its own location, which is why
+         * the tree is kept whole rather than having its binaries copied in
+         * beside KLEE's, and why the driver keeps its target prefix -- clang
+         * reads the target it defaults to out of its own argv[0].
+         */
+        fs::path userToolchainTool(const std::string &name) {
+#ifdef _WIN32
+            return getUTBotToolchainDir() / "bin" / ("x86_64-w64-mingw32-" + name);
+#else
+            return getUTBotInstallDir() / "bin" / name;
+#endif
+        }
+
+        fs::path userToolchainUtility(const std::string &name) {
+#ifdef _WIN32
+            return getUTBotToolchainDir() / "bin" / name;
+#else
+            return getUTBotInstallDir() / "bin" / name;
+#endif
+        }
+    }
+
     fs::path getKleeIncludeDir() {
         return getUTBotInstallDir() / "include";
     }
@@ -100,11 +141,11 @@ namespace Paths {
     }
 
     fs::path getUTBotClang() {
-        return getUTBotInstallDir() / "bin" / "clang";
+        return userToolchainTool("clang");
     }
 
     fs::path getUTBotClangPP() {
-        return getUTBotInstallDir() / "bin" / "clang++";
+        return userToolchainTool("clang++");
     }
 
     fs::path getGcc() {
@@ -116,7 +157,7 @@ namespace Paths {
     }
 
     fs::path getLLVMnm() {
-        return getUTBotInstallDir() / "bin" / "llvm-nm";
+        return userToolchainUtility("llvm-nm");
     }
 
     fs::path getGtestLibPath() {
@@ -128,11 +169,11 @@ namespace Paths {
     }
 
     fs::path getLLVMprofdata() {
-        return getUTBotInstallDir() / "bin" / "llvm-profdata";
+        return userToolchainUtility("llvm-profdata");
     }
 
     fs::path getLLVMcov() {
-        return getUTBotInstallDir() / "bin" / "llvm-cov";
+        return userToolchainUtility("llvm-cov");
     }
 
     fs::path getLLVMgold() {
@@ -147,13 +188,13 @@ namespace Paths {
         // llvm-objcopy rather than binutils objcopy: it is part of the LLVM the
         // distribution already carries, so it needs nothing installed and
         // behaves the same on both platforms.
-        return getUTBotInstallDir() / "bin" / "llvm-objcopy";
+        return userToolchainUtility("llvm-objcopy");
     }
 
     fs::path getAr() {
         // llvm-ar, not binutils ar: it reads and indexes bitcode members
         // natively, where binutils needs the LLVMgold plugin to do it at all.
-        return getUTBotInstallDir() / "bin" / "llvm-ar";
+        return userToolchainUtility("llvm-ar");
     }
 
     fs::path getLdGold() {

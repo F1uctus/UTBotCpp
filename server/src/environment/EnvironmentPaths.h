@@ -8,6 +8,10 @@ namespace Paths {
     
     fs::path getUTBotInstallDir();
 
+    /// Where the toolchain that compiles the user's code lives, as opposed to
+    /// the install prefix, which holds what UTBot itself was built with.
+    fs::path getUTBotToolchainDir();
+
     fs::path getUTBotDebsInstallDir();
 
     fs::path getPython();

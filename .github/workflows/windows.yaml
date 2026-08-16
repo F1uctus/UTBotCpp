@@ -468,6 +468,57 @@ jobs:
           }
           Write-Host 'make, sh and the POSIX applets are in place'
 
+          # --- the toolchain the user's code is compiled with ---
+          # Not the clang from the clang+llvm-*-windows-msvc release the server
+          # links: that one targets the MSVC ABI, and its headers and import
+          # libraries belong to Visual Studio, which LLVM cannot redistribute.
+          # A machine without Visual Studio cannot compile #include <stdio.h>
+          # with it, which would make "portable" untrue in the one way that
+          # matters.
+          #
+          # llvm-mingw is the same LLVM 22.1.8 built for mingw-w64, carrying
+          # its own CRT, libc++ and headers. The version has to match: KLEE
+          # reads bitcode from its own LLVM or older, and this is that LLVM.
+          $mingwTag = '20260616'
+          $mingwName = "llvm-mingw-$mingwTag-ucrt-x86_64"
+          $mingwZip = Join-Path $deps "$mingwName.zip"
+          if (-not (Test-Path -LiteralPath $mingwZip)) {
+            Invoke-WebRequest -UseBasicParsing -OutFile $mingwZip `
+              -Uri "https://github.com/mstorsjo/llvm-mingw/releases/download/$mingwTag/$mingwName.zip"
+          }
+          $mingwRoot = Join-Path $deps $mingwName
+          if (-not (Test-Path -LiteralPath $mingwRoot)) {
+            & 7z.exe x $mingwZip "-o$deps" -y -bso0 -bsp0
+            if ($LASTEXITCODE -ne 0) { throw 'unpacking llvm-mingw failed' }
+          }
+          $toolchain = Join-Path $env:UTBOT_ALL 'toolchain'
+          if (-not (Test-Path -LiteralPath $toolchain)) {
+            Copy-Item -Recurse -Force $mingwRoot $toolchain
+            # clang resolves its sysroot relative to itself, so the tree stays
+            # whole -- but only for the one architecture that is being built
+            # for, and without the parts that debug or lint rather than build.
+            foreach ($unused in @('aarch64-w64-mingw32', 'armv7-w64-mingw32',
+                                   'arm64ec-w64-mingw32', 'i686-w64-mingw32',
+                                   'python', 'busybox')) {
+              Remove-Item -LiteralPath (Join-Path $toolchain $unused) `
+                -Recurse -Force -ErrorAction SilentlyContinue
+            }
+            foreach ($pattern in @('lldb*', 'clangd*', 'clang-tidy*', 'clang-format*',
+                                    'liblldb*', 'libpython*')) {
+              Get-ChildItem -LiteralPath (Join-Path $toolchain 'bin') -Filter $pattern `
+                -ErrorAction SilentlyContinue | Remove-Item -Force -ErrorAction SilentlyContinue
+            }
+          }
+          $mingwClang = Join-Path $toolchain 'bin\x86_64-w64-mingw32-clang.exe'
+          if (-not (Test-Path -LiteralPath $mingwClang)) {
+            throw 'the toolchain has no x86_64-w64-mingw32-clang.exe'
+          }
+          & $mingwClang --version | Select-Object -First 2
+          "UTBOT_TOOLCHAIN_CLANG=$mingwClang" |
+            Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "UTBOT_TOOLCHAIN=$toolchain" |
+            Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
           # --- CMake and Ninja, for importing the user's own project ---
           # A clean Windows has neither, and the generator CMake would pick by
           # default there is Visual Studio, which writes no
@@ -703,7 +754,9 @@ jobs:
           ) | Set-Content -LiteralPath (Join-Path $fixture 'classify.c') -Encoding ascii
 
           $bin = Join-Path $env:UTBOT_ALL 'install\bin'
-          & (Join-Path $bin 'clang.exe') -I (Join-Path $env:UTBOT_ALL 'install\include') `
+          # The same clang the server spawns, so the bitcode KLEE is handed
+          # here is the bitcode it will be handed in earnest.
+          & $env:UTBOT_TOOLCHAIN_CLANG -I (Join-Path $env:UTBOT_ALL 'install\include') `
             -emit-llvm -c -g -O0 (Join-Path $fixture 'classify.c') `
             -o (Join-Path $fixture 'classify.bc')
           if ($LASTEXITCODE -ne 0) { throw 'compiling the fixture failed' }
@@ -760,9 +813,8 @@ jobs:
 
           $build = Join-Path $fixture 'build'
           New-Item -ItemType Directory -Path $build -Force | Out-Null
-          $bin = Join-Path $env:UTBOT_ALL 'install\bin'
-          $clang = Join-Path $bin 'clang.exe'
-          $ar = Join-Path $bin 'llvm-ar.exe'
+          $clang = $env:UTBOT_TOOLCHAIN_CLANG
+          $ar = Join-Path $env:UTBOT_TOOLCHAIN 'bin\llvm-ar.exe'
 
           # A compilation database by hand: Bear intercepts exec() and does not
           # apply here, and CMake would be another moving part in a test of the
@@ -779,7 +831,7 @@ jobs:
             $objects += $object
             $compile += [ordered]@{
               directory = ($build -replace '\\', '/')
-              command = "clang -c -g -O0 $source -o $object"
+              command = "$($clang -replace '\\', '/') -c -g -O0 $source -o $object"
               file = $source
               output = $object
             }
@@ -954,6 +1006,10 @@ jobs:
             Copy-Item -LiteralPath $tool.FullName -Destination (Join-Path $stage 'bin') -Force
           }
 
+          # The toolchain that compiles the user's code, kept whole because
+          # clang finds its own headers and libraries relative to itself.
+          Copy-Item -Recurse -Force (Join-Path $env:UTBOT_ALL 'toolchain') $stage
+
           # gtest, as sources: the generated makefiles compile gtest-all.cc and
           # gtest_main.cc themselves. Only the two directories they read are
           # shipped -- the rest of the checkout is gtest's own test suite.
@@ -1011,6 +1067,10 @@ jobs:
                                    'install\bin\llvm-nm.exe', 'install\bin\llvm-objcopy.exe',
                                    'install\bin\llvm-cov.exe', 'install\bin\llvm-profdata.exe',
                                    'install\bin\cmake.exe', 'install\bin\ninja.exe',
+                                   'toolchain\bin\x86_64-w64-mingw32-clang.exe',
+                                   'toolchain\bin\x86_64-w64-mingw32-clang++.exe',
+                                   'toolchain\bin\llvm-ar.exe',
+                                   'toolchain\x86_64-w64-mingw32\lib\libucrt.a',
                                    'install\include\klee\klee.h',
                                    'bin\make.exe', 'bin\sh.exe', 'bin\mkdir.exe',
                                    'bin\mv.exe', 'bin\rm.exe',
@@ -1080,50 +1140,68 @@ jobs:
           $env:PATH = $savedPath
           Move-Item -LiteralPath $moved -Destination $env:STAGE
 
-      - name: Measure what the distribution still needs from the machine
+      - name: Verify the distribution needs nothing from the machine
         run: |
-          # The distribution is meant to be copied onto a clean Windows and
-          # work. Everything UTBot spawns is inside it -- but the clang it
-          # spawns targets the MSVC ABI, and that toolchain's headers and
-          # import libraries are not LLVM's to ship.
+          # The point of the whole exercise: a machine with this directory on
+          # it and nothing else can compile C and C++.
           #
-          # This runner has Visual Studio, so a clean machine cannot be
-          # simulated by deleting environment variables: clang finds VS through
-          # the registry as well. What can be measured is where the include
-          # paths it chooses actually point. Any that leave the distribution is
-          # something the target machine would have to provide itself.
-          $moved = $env:STAGE
-          $clang = Join-Path $moved 'install\bin\clang.exe'
+          # Visual Studio is installed on this runner and clang finds it
+          # through the registry as well as the environment, so "clean" cannot
+          # be simulated by deleting variables. What can be checked is stronger
+          # anyway -- where the include paths the compiler actually chooses
+          # point. A mingw-w64 target consults neither the registry nor the
+          # Windows SDK, so every one of them should be inside the tree.
+          $stage = $env:STAGE
+          $clang = Join-Path $stage 'toolchain\bin\x86_64-w64-mingw32-clang.exe'
+          $clangxx = Join-Path $stage 'toolchain\bin\x86_64-w64-mingw32-clang++.exe'
           $probe = Join-Path $env:RUNNER_TEMP 'sysrootprobe'
+          Remove-Item -LiteralPath $probe -Recurse -Force -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Path $probe -Force | Out-Null
-          @('#include <stdio.h>', 'int main(void) { printf("hi"); return 0; }') |
+          @('#include <stdio.h>', 'int main(void) { printf("hi\n"); return 0; }') |
             Set-Content -LiteralPath (Join-Path $probe 'hello.c') -Encoding ascii
+          @('#include <string>', '#include <vector>', '#include <cstdio>',
+            'int main() { std::vector<std::string> v{"hi"}; printf("%s\n", v[0].c_str()); return 0; }') |
+            Set-Content -LiteralPath (Join-Path $probe 'hello.cpp') -Encoding ascii
 
-          $verbose = & $clang -v -c (Join-Path $probe 'hello.c') `
-            -o (Join-Path $probe 'hello.o') 2>&1 | Out-String
-          $compiled = $LASTEXITCODE -eq 0
-          Write-Host $verbose
+          # Cleared anyway, so that a pass cannot be coming from the runner's
+          # MSVC environment leaking in.
+          foreach ($name in @('INCLUDE', 'LIB', 'LIBPATH', 'VCToolsInstallDir',
+                               'WindowsSdkDir', 'VCINSTALLDIR', 'VSINSTALLDIR')) {
+            Remove-Item -Path "env:$name" -ErrorAction SilentlyContinue
+          }
 
-          $external = @()
-          foreach ($line in ($verbose -split "`r?`n")) {
-            $trimmed = $line.Trim()
-            if ($trimmed -notmatch '^[A-Za-z]:\\') { continue }
-            if ($trimmed -like "$moved*") { continue }
-            if ($trimmed -match 'Program Files|Windows Kits|Microsoft Visual Studio') {
-              $external += $trimmed
+          $failures = @()
+          foreach ($case in @(@{ compiler = $clang;   source = 'hello.c';   out = 'hello-c.exe' },
+                              @{ compiler = $clangxx; source = 'hello.cpp'; out = 'hello-cxx.exe' })) {
+            $exe = Join-Path $probe $case.out
+            $verbose = & $case.compiler -v (Join-Path $probe $case.source) -o $exe 2>&1 | Out-String
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host $verbose
+              $failures += "$($case.source) does not compile with only the distribution"
+              continue
+            }
+            foreach ($line in ($verbose -split "`r?`n")) {
+              $trimmed = $line.Trim()
+              if ($trimmed -notmatch '^[A-Za-z]:[\\/]') { continue }
+              if ($trimmed -match 'Program Files|Windows Kits|Microsoft Visual Studio') {
+                $failures += "reaches outside the distribution: $trimmed"
+              }
+            }
+            # And it has to run, not merely link: a missing runtime DLL shows
+            # up here and nowhere earlier.
+            $output = & $exe 2>&1 | Out-String
+            if ($LASTEXITCODE -ne 0 -or $output -notmatch 'hi') {
+              $failures += "$($case.out) does not run: $output"
+            } else {
+              Write-Host "$($case.out) built and ran with only the distribution"
             }
           }
 
-          Write-Host "compiles a stdio.h hello world: $compiled"
-          if ($external) {
-            Write-Host '::warning::The distribution is not self-contained for compiling user code.'
-            Write-Host 'Include paths outside it:'
-            $external | Sort-Object -Unique | ForEach-Object { Write-Host "  $_" }
-            "SELF_CONTAINED_TOOLCHAIN=no" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          } else {
-            Write-Host 'Every include path is inside the distribution.'
-            "SELF_CONTAINED_TOOLCHAIN=yes" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          if ($failures) {
+            $failures | Sort-Object -Unique | ForEach-Object { Write-Host "  $_" }
+            throw 'the distribution is not self-contained for compiling user code'
           }
+          Write-Host 'C and C++ both compile, link and run from the distribution alone'
 
       - name: Upload the distribution
         uses: actions/upload-artifact@v4
