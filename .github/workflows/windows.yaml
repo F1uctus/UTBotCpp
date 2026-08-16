@@ -23,12 +23,21 @@ on:
       - main
   workflow_dispatch:
 
+concurrency:
+  # A push to ci/** and the pull request created from that branch describe the
+  # same source tree. Give both events one key so they do not occupy two Windows
+  # runners at the same time.
+  group: windows-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
 env:
   # Has to match the KLEE side: LLVM reads bitcode from its own version or
   # older, never newer, and the server, KLEE and the bundled clang all handle
   # the same bitcode.
   LLVM_VERSION: 22.1.8
   Z3_VERSION: 4.16.0
+  VCPKG_TARGET_TRIPLET: x64-windows-static-release
+  VCPKG_HOST_TRIPLET: x64-windows-release
 
 defaults:
   run:
@@ -38,7 +47,7 @@ jobs:
   build:
     name: x86-64 native
     runs-on: windows-2022
-    timeout-minutes: 300
+    timeout-minutes: 360
 
     steps:
       - name: Check out UTBotCpp
@@ -345,31 +354,33 @@ jobs:
         with:
           # Separate from the packages: these survive even when a run fails
           # partway, which is what makes the next attempt cheaper.
-          path: ${{ env.VCPKG_INSTALLATION_ROOT }}\downloads
-          key: vcpkg-downloads-grpc-protobuf-v1
+          path: ${{ github.workspace }}\.vcpkg-downloads
+          key: vcpkg-downloads-grpc-protobuf-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            vcpkg-downloads-grpc-protobuf-v1-
 
-
-      - name: Restore the vcpkg packages
-        id: vcpkg-cache
+      - name: Restore the vcpkg binary cache
+        id: vcpkg-binary-cache
         uses: actions/cache/restore@v4
         with:
-          # The runner image ships vcpkg already, so only what gets built into
-          # it is worth carrying between runs.
-          #
-          # restore/save rather than cache: the combined action saves in a post
-          # step that is skipped when the job fails, and every run so far has
-          # failed somewhere after this point -- so an hour of gRPC was rebuilt
-          # each time and never kept. The save below runs as soon as there is
-          # something worth keeping.
-          # Keep the install root inside the workspace. actions/cache rejects
-          # a path containing '..', and runner-provided environment variables
-          # are not workflow-expression variables, so neither the old sibling
-          # path nor ${{ env.VCPKG_INSTALLATION_ROOT }} is safe here.
-          path: ${{ github.workspace }}\.vcpkg-installed
-          key: vcpkg-grpc-protobuf-x64-windows-static-codegen-v1
+          # The installed tree is more than 20 GiB, whereas vcpkg's compressed
+          # binary archives are small enough for the Actions cache. Complete
+          # ports restored from here are installed without recompilation.
+          path: ${{ github.workspace }}\.vcpkg-binary-cache
+          key: vcpkg-binary-windows-${{ hashFiles('.github/vcpkg-manifest/vcpkg.json', '.github/vcpkg-triplets/*.cmake') }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            vcpkg-binary-windows-${{ hashFiles('.github/vcpkg-manifest/vcpkg.json', '.github/vcpkg-triplets/*.cmake') }}-
+            vcpkg-binary-windows-
 
       - name: Build gRPC and protobuf
-        timeout-minutes: 120
+        id: grpc-build
+        # Let the cache-saving steps below run after a compiler error or a
+        # timeout. The explicit gate after them restores the failed job status.
+        continue-on-error: true
+        timeout-minutes: 240
+        env:
+          VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\.vcpkg-binary-cache
+          VCPKG_DOWNLOADS: ${{ github.workspace }}\.vcpkg-downloads
         run: |
           # The image's vcpkg rather than a fresh clone: cloning means
           # bootstrapping, and bootstrapping downloads vcpkg.exe, which is one
@@ -384,7 +395,14 @@ jobs:
           Write-Host "Using vcpkg at $vcpkg"
 
           $installedRoot = Join-Path $env:GITHUB_WORKSPACE '.vcpkg-installed'
-          $grpcConfig = Join-Path $installedRoot 'x64-windows-static\share\grpc\gRPCConfig.cmake'
+          $manifestRoot = Join-Path $env:GITHUB_WORKSPACE '.github\vcpkg-manifest'
+          $overlayTriplets = Join-Path $env:GITHUB_WORKSPACE '.github\vcpkg-triplets'
+          foreach ($cachePath in @($env:VCPKG_DEFAULT_BINARY_CACHE,
+                                   $env:VCPKG_DOWNLOADS)) {
+            New-Item -ItemType Directory -Path $cachePath -Force | Out-Null
+          }
+          $grpcConfig = Join-Path $installedRoot `
+            "$env:VCPKG_TARGET_TRIPLET\share\grpc\gRPCConfig.cmake"
           if (Test-Path -LiteralPath $grpcConfig) {
             Write-Host "Using the cached packages at $grpcConfig"
           } else {
@@ -399,7 +417,10 @@ jobs:
             $installed = $false
             foreach ($attempt in 1..5) {
               & (Join-Path $vcpkg 'vcpkg.exe') install `
-                'grpc[codegen]:x64-windows-static' protobuf:x64-windows-static `
+                "--x-manifest-root=$manifestRoot" `
+                "--triplet=$env:VCPKG_TARGET_TRIPLET" `
+                "--host-triplet=$env:VCPKG_HOST_TRIPLET" `
+                "--overlay-triplets=$overlayTriplets" `
                 "--x-install-root=$installedRoot"
               if ($LASTEXITCODE -eq 0) { $installed = $true; break }
               Write-Host "::warning::vcpkg install attempt $attempt failed"
@@ -410,20 +431,34 @@ jobs:
           "VCPKG_ROOT_DIR=$vcpkg" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           "VCPKG_INSTALLED_DIR=$installedRoot" |
             Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "VCPKG_OVERLAY_TRIPLETS=$overlayTriplets" |
+            Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
-      - name: Save the vcpkg packages
-        if: steps.vcpkg-cache.outputs.cache-hit != 'true'
+      - name: Save the vcpkg binary cache
+        if: always() && steps.vcpkg-binary-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
-          path: ${{ github.workspace }}\.vcpkg-installed
-          key: vcpkg-grpc-protobuf-x64-windows-static-codegen-v1
+          path: ${{ github.workspace }}\.vcpkg-binary-cache
+          key: vcpkg-binary-windows-${{ hashFiles('.github/vcpkg-manifest/vcpkg.json', '.github/vcpkg-triplets/*.cmake') }}-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Save the vcpkg downloads
-        if: steps.vcpkg-downloads-cache.outputs.cache-hit != 'true'
+        if: always() && steps.vcpkg-downloads-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
-          path: ${{ env.VCPKG_INSTALLATION_ROOT }}\downloads
-          key: vcpkg-downloads-grpc-protobuf-v1
+          path: ${{ github.workspace }}\.vcpkg-downloads
+          key: vcpkg-downloads-grpc-protobuf-v1-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Require a complete gRPC installation
+        if: always()
+        run: |
+          if ('${{ steps.grpc-build.outcome }}' -ne 'success') {
+            throw 'The gRPC build failed; its completed ports were preserved for the next run'
+          }
+          $grpcConfig = Join-Path $env:GITHUB_WORKSPACE `
+            ".vcpkg-installed\$env:VCPKG_TARGET_TRIPLET\share\grpc\gRPCConfig.cmake"
+          if (-not (Test-Path -LiteralPath $grpcConfig)) {
+            throw "gRPC reported success but $grpcConfig is missing"
+          }
 
       - name: Fetch CLI11
         run: |
@@ -453,7 +488,9 @@ jobs:
           cmake -S server -B build -G Ninja `
             -DCMAKE_BUILD_TYPE=Release `
             -DCMAKE_TOOLCHAIN_FILE="$vcpkg\scripts\buildsystems\vcpkg.cmake" `
-            -DVCPKG_TARGET_TRIPLET=x64-windows-static `
+            -DVCPKG_TARGET_TRIPLET="$env:VCPKG_TARGET_TRIPLET" `
+            -DVCPKG_HOST_TRIPLET="$env:VCPKG_HOST_TRIPLET" `
+            -DVCPKG_OVERLAY_TRIPLETS="$env:VCPKG_OVERLAY_TRIPLETS" `
             -DVCPKG_INSTALLED_DIR="$env:VCPKG_INSTALLED_DIR" `
             -DCMAKE_C_COMPILER="$env:LLVM_ROOT/bin/clang-cl.exe" `
             -DCMAKE_CXX_COMPILER="$env:LLVM_ROOT/bin/clang-cl.exe" `
@@ -528,12 +565,12 @@ jobs:
       - name: Smoke test -- the server binary runs
         run: |
           $utbot = Join-Path $env:GITHUB_WORKSPACE 'build\utbot.exe'
-          $help = & $utbot --help 2>&1 | Out-String
-          if ($LASTEXITCODE -ne 0) { throw "utbot --help failed ($LASTEXITCODE)" }
+          $help = & $utbot --help-all 2>&1 | Out-String
+          if ($LASTEXITCODE -ne 0) { throw "utbot --help-all failed ($LASTEXITCODE)" }
           foreach ($expected in @('generate', 'server', '--no-ubsan')) {
             if ($help -notmatch [regex]::Escape($expected)) {
               Write-Host $help
-              throw "utbot --help does not mention '$expected'"
+              throw "utbot --help-all does not mention '$expected'"
             }
           }
           Write-Host 'utbot.exe starts and reports its interface'
@@ -647,7 +684,7 @@ jobs:
           # Runtime DLLs. gRPC and protobuf are linked statically with /MT to
           # match LLVM, while Z3 is shipped as a DLL.
           $deps = Join-Path (Split-Path -Parent $env:GITHUB_WORKSPACE) 'deps'
-          foreach ($dll in @(Get-ChildItem -LiteralPath "$env:VCPKG_INSTALLED_DIR\x64-windows-static\bin" `
+          foreach ($dll in @(Get-ChildItem -LiteralPath "$env:VCPKG_INSTALLED_DIR\$env:VCPKG_TARGET_TRIPLET\bin" `
                                -Filter '*.dll' -ErrorAction SilentlyContinue)) {
             Copy-Item -LiteralPath $dll.FullName -Destination (Join-Path $stage 'bin') -Force
           }

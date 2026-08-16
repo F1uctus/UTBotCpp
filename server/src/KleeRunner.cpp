@@ -67,17 +67,45 @@ namespace {
     }
 
     StatsUtils::KleeStats writeKleeStats(const fs::path &kleeOut) {
-        ShellExecTask::ExecutionParameters kleeStatsParams("klee-stats",
-                                                           {"--utbot-config", kleeOut.string(),
-                                                            "--table-format=readable-csv"});
-        auto[out, status, _] = ShellExecTask::runShellCommandTask(kleeStatsParams);
-        if (status != 0) {
-            LOG_S(ERROR) << "klee-stats call failed:" << "\n" << out;
+        std::string statsExecutable = "klee-stats";
+        std::vector<std::string> statsArguments;
+#ifdef _WIN32
+        // The Windows KLEE package ships the tool as a Python script plus a
+        // .cmd launcher. CreateProcess does not execute .cmd files directly,
+        // so invoke the script through Python explicitly.
+        const fs::path python = fs::findInPATH("python.exe");
+        if (!fs::exists(python)) {
+            LOG_S(DEBUG) << "Python is unavailable; generation statistics will be zero";
             return {};
         }
-        LOG_S(DEBUG) << "klee-stats report:" << '\n' << out;
-        std::stringstream ss(out);
-        return StatsUtils::KleeStats(ss);
+        statsExecutable = python.string();
+        statsArguments.push_back((Paths::getKlee().parent_path() / "klee-stats.py").string());
+#else
+        // UTBot's original KLEE fork adds this compact output mode. The native
+        // Windows port is based on current upstream KLEE and uses its standard
+        // positional directory argument instead.
+        statsArguments.push_back("--utbot-config");
+#endif
+        statsArguments.insert(statsArguments.end(),
+                              {"--table-format=readable-csv", kleeOut.string()});
+        ShellExecTask::ExecutionParameters kleeStatsParams(statsExecutable, statsArguments);
+        try {
+            auto[out, status, _] = ShellExecTask::runShellCommandTask(kleeStatsParams);
+            if (status != 0) {
+                LOG_S(WARNING) << "klee-stats call failed; generation statistics will be zero:"
+                               << "\n" << out;
+                return {};
+            }
+            LOG_S(DEBUG) << "klee-stats report:" << '\n' << out;
+            std::stringstream ss(out);
+            return StatsUtils::KleeStats(ss);
+        } catch (const std::exception &exception) {
+            // Python is intentionally not part of the portable Windows package.
+            // Test generation must not depend on an optional statistics report.
+            LOG_S(WARNING) << "klee-stats is unavailable; generation statistics will be zero: "
+                           << exception.what();
+            return {};
+        }
     }
 }
 
@@ -279,8 +307,8 @@ KleeRunner::createKleeParams(const tests::TestMethod &testMethod,
         "--use-tbaa",
         // KLEE's default cap is 2000MB, and it counts the deterministic
         // allocator's usage as well as its own heap. A whole-project module is
-        // over that before any exploration happens -- on T1100 the initial
-        // state was killed during setup, which is reported as a run that found
+        // over that before any exploration happens -- on a large project the
+        // initial state was killed during setup, which is reported as a run that found
         // nothing rather than as a failure. This has to be the analysis budget,
         // not the module's baseline.
         "--max-memory=" + std::to_string(maxMemoryMegabytes),

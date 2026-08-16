@@ -168,7 +168,7 @@ namespace Paths {
 
     static inline fs::path getUtbotLogAllFilePath() {
         const static std::string filename = "utbot-" + TimeUtils::getCurrentTimeStr() + ".log";
-        return logPath / Paths::getBaseLogDir() / filename;
+        return Paths::getBaseLogDir() / filename;
     }
 
     static inline fs::path getClientLogDir(const std::string &client) {

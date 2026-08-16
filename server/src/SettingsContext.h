@@ -37,8 +37,8 @@ namespace utbot {
          * Whether the bitcode handed to KLEE is compiled with UBSan checks.
          *
          * They let KLEE report undefined behaviour, and they are expensive: on
-         * one T1100 harness the instrumentation was five sixths of the bitcode,
-         * and every check is a call KLEE has to execute. Since UTBot links the
+         * one large embedded harness the instrumentation was five sixths of the
+         * bitcode, and every check is a call KLEE has to execute. Since UTBot links the
          * whole project into one module and reloads it for each method, that
          * cost is paid again per method.
          */
