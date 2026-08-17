@@ -49,7 +49,18 @@ void DefaultMakefilePrinter::declareVariable(std::string const &name, std::strin
 }
 
 void DefaultMakefilePrinter::declareVariableIfNotDefined(std::string const &variableName, std::string const &ifNotDefinedValue) {
-    ss << StringUtils::stringFormat("ifndef %s\n", variableName);
+    // "ifndef" is not the question being asked. make predefines AR as "ar" and
+    // LD as "ld", so those two are always defined and the declaration below was
+    // dropped every time -- leaving the recipes to call whatever ar and ld the
+    // machine happened to have. Linux has both, which is why this held together
+    // there; Windows has neither, and the name resolved to the busybox applet
+    // that implements only x/p/t/r.
+    //
+    // $(origin) tells the two apart: "default" is make's own value, "undefined"
+    // is nothing at all, and anything else -- file, environment, command line --
+    // is the user genuinely asking for a tool, which is what should win here.
+    ss << StringUtils::stringFormat("ifeq ($(filter-out default undefined,$(origin %s)),)\n",
+                                    variableName);
     ss << TAB;
     declareVariable(variableName, ifNotDefinedValue);
     ss << "endif\n";
