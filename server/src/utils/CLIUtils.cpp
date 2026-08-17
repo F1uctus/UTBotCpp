@@ -284,10 +284,15 @@ void CLIUtils::parse(int argc, char **argv, CLI::App &app) {
         LOG_S(INFO) << "Successfully finished.";
     } else {
         Server server;
-        if (serverCommandOptions.getPort() != 0) {
-            server.run(serverCommandOptions.getPort());
-        } else {
-            server.run();
+        const bool served = serverCommandOptions.getPort() != 0
+                                    ? server.run(serverCommandOptions.getPort())
+                                    : server.run();
+        if (!served) {
+            // A server that never listened has not done what it was asked, and
+            // returning normally here would tell a caller -- a script, or the
+            // extension starting it -- that it had. See the configure command
+            // above for why this exits rather than throws.
+            std::exit(1);
         }
     }
 }

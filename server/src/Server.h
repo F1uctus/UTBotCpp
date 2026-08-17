@@ -56,7 +56,9 @@ public:
 
     explicit Server(bool testMode);
 
-    void run(uint16_t customPort = 0);
+    /// Serves until the server is shut down. False if it never started, which
+    /// on this path means the port could not be listened on.
+    bool run(uint16_t customPort = 0);
 
     class TestsGenServiceImpl final : public TestsGenService::Service {
     public:

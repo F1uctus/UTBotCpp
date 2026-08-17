@@ -45,7 +45,7 @@ using TypeUtils::isSameType;
 const std::string Server::logPrefix = "logTo";
 const std::string Server::gtestLogPrefix = "gtestLogTo";
 
-void Server::run(uint16_t customPort) {
+bool Server::run(uint16_t customPort) {
     LOG_S(INFO) << "UnitTestBot Server, build " << UTBOT_BUILD_VERSION;
     LOG_S(INFO) << "Logs directory: " << Paths::logPath;
     LOG_S(INFO) << "Latest log path: " << Paths::getUtbotLogAllFilePath();
@@ -65,16 +65,31 @@ void Server::run(uint16_t customPort) {
     builder.RegisterService(&testsService);
     if (ServerUtils::checkPort(host, port)) {
         LOG_S(INFO) << "Address: " << address << std::endl;
+        gRPCServer = builder.BuildAndStart();
+        if (gRPCServer == nullptr) {
+            // The check above is a probe, and a probe can only ever say that
+            // the port was free a moment ago: it binds a socket of its own and
+            // closes it again, and it asks about IPv4 where a server already
+            // running is likely holding the dual-stack address. Only the bind
+            // that gRPC does for itself is the real answer, and it reports
+            // failure by handing back nothing -- which the Wait below used to
+            // dereference, turning "the port is taken" into an access
+            // violation and a stack trace.
+            LOG_S(ERROR) << "Could not listen on " << address
+                         << ". Another server is most likely already running there; "
+                            "stop it, or choose another port with --port or UTBOT_SERVER_PORT.";
+            return false;
+        }
         /* Launches the watcher in a separate thread that releases
          * unused grpc::ServerWriter<> resources.
          */
         logChannelsWatcherTask =
                 std::async(std::launch::async, LogUtils::logChannelsWatcher, std::ref(*this));
-        gRPCServer = builder.BuildAndStart();
         gRPCServer->Wait();
-    } else {
-        LOG_S(ERROR) << "Port unavailable: " << port << std::endl;
+        return true;
     }
+    LOG_S(ERROR) << "Port unavailable: " << port << std::endl;
+    return false;
 }
 
 uint16_t Server::getPort() {
