@@ -1175,6 +1175,17 @@ jobs:
             Remove-Item -Path "env:$name" -ErrorAction SilentlyContinue
           }
 
+          # The C++ runtime the toolchain builds against, so a binary that
+          # imports it by base name can be started. Checked before it is used,
+          # so that "missing from the distribution" cannot hide behind it.
+          $toolchainBin = Join-Path $stage 'toolchain\bin'
+          foreach ($runtime in @('libc++.dll', 'libunwind.dll')) {
+            if (-not (Test-Path -LiteralPath (Join-Path $toolchainBin $runtime))) {
+              throw "the distribution carries no $runtime"
+            }
+          }
+          $env:PATH = "$toolchainBin;$env:PATH"
+
           $failures = @()
           foreach ($case in @(@{ compiler = $clang;   source = 'hello.c';   out = 'hello-c.exe' },
                               @{ compiler = $clangxx; source = 'hello.cpp'; out = 'hello-cxx.exe' })) {
@@ -1194,6 +1205,14 @@ jobs:
             }
             # And it has to run, not merely link: a missing runtime DLL shows
             # up here and nowhere earlier.
+            #
+            # With the toolchain's bin on PATH, because that is where its own
+            # libc++ and libunwind live and a C++ binary imports them by base
+            # name. This is not a concession -- it is how the distribution is
+            # driven: DefaultMakefilePrinter puts the same directory on PATH
+            # in every generated makefile, for this reason and for ASan's
+            # dynamic runtime. A DLL genuinely missing from the tree still
+            # fails here, which is what this is watching for.
             $output = & $exe 2>&1 | Out-String
             if ($LASTEXITCODE -ne 0 -or $output -notmatch 'hi') {
               $failures += "$($case.out) does not run: $output"
