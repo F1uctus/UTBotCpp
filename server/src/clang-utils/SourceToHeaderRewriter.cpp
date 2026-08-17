@@ -103,13 +103,15 @@ std::string SourceToHeaderRewriter::generateTestHeader(const fs::path &sourceFil
         "%s\n"
         "%s\n"
         "%s\n"
+        "%s\n"
         "\n%s"
         "}\n",
         Copyright::GENERATED_C_CPP_FILE_HEADER, PrinterUtils::TEST_NAMESPACE,
         NameDecorator::DEFINES_CODE, PrinterUtils::DEFINES_FOR_C_KEYWORDS,
         PrinterUtils::KNOWN_IMPLICIT_RECORD_DECLS_CODE,
         sourceDeclarations.externalDeclarations, sourceDeclarations.internalDeclarations,
-        NameDecorator::UNDEF_WCHAR_T, NameDecorator::UNDEFS_CODE, sourceDeclarations.unnamedTypeDeclarations);
+        NameDecorator::UNDEF_WCHAR_T, NameDecorator::UNDEFS_CODE,
+        PrinterUtils::UNDEFS_FOR_C_KEYWORDS, sourceDeclarations.unnamedTypeDeclarations);
 }
 
 std::string SourceToHeaderRewriter::generateStubHeader(const tests::Tests &tests, const fs::path &sourceFilePath) {
