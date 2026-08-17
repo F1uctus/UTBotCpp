@@ -1,5 +1,8 @@
 #include "CLIUtils.h"
 
+#include "building/UserProjectConfiguration.h"
+#include "streams/CLIProjectConfigWriter.h"
+
 #include "GenerationUtils.h"
 #include "Paths.h"
 #include "commands/Commands.h"
@@ -100,6 +103,12 @@ void CLIUtils::parse(int argc, char **argv, CLI::App &app) {
     auto projectAllContext = ProjectContextOptionGroup(mainCommands.getAllCommand());
     auto settingsAllContext = SettingsContextOptionGroup(mainCommands.getAllCommand());
 
+    auto projectConfigureContext = ProjectContextOptionGroup(mainCommands.getConfigureCommand());
+    std::vector<std::string> configureCmakeOptions;
+    mainCommands.getConfigureCommand()->add_option(
+            "--cmake-option", configureCmakeOptions,
+            "Option to pass to cmake. Repeat for more than one.");
+
     auto generateCommandsOptions = GenerateCommandsOptions(generateCommands);
     auto runTestCommandsOptions = RunTestsCommandOptions(runCommands);
 
@@ -190,6 +199,20 @@ void CLIUtils::parse(int argc, char **argv, CLI::App &app) {
             }
         } else if (generateCommands.gotStubsCommand()) {
             createProjectStubsAndWriteStatus(projectRequest.get(), ctx.get());
+        }
+
+    } else if (app.got_subcommand(mainCommands.getConfigureCommand())) {
+        auto projectContext = createProjectContextByOptions(projectConfigureContext);
+        utbot::ProjectContext utbotProjectContext{ *projectContext };
+        CLIProjectConfigWriter writer;
+        UserProjectConfiguration::RunProjectReConfigurationCommands(
+                utbotProjectContext.getBuildDirAbsPath(),
+                fs::path(utbotProjectContext.projectPath), utbotProjectContext,
+                configureCmakeOptions, writer);
+        if (writer.failed()) {
+            // The configuration reports itself through statuses, so nothing
+            // above would have noticed. Say so in the only way a shell reads.
+            throw CLI::RuntimeError(1);
         }
 
     } else if (app.got_subcommand(mainCommands.getRunTestsCommand())) {

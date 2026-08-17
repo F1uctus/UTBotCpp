@@ -27,6 +27,8 @@ namespace Commands {
 
         CLI::App *getAllCommand();
 
+        CLI::App *getConfigureCommand();
+
         fs::path getLogPath();
 
         loguru::NamedVerbosity getVerbosity();
@@ -40,6 +42,7 @@ namespace Commands {
         CLI::App *generateCommand;
         CLI::App *runTestsCommand;
         CLI::App *allCommand;
+        CLI::App *configureCommand;
     };
 
     struct ServerCommandOptions {

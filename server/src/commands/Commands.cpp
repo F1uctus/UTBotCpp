@@ -30,6 +30,11 @@ Commands::MainCommands::MainCommands(CLI::App &app) {
     runTestsCommand = app.add_subcommand("run", "Launch unit tests and generate coverage info.");
     allCommand = app.add_subcommand(
             "all", "Sequential launch of 'generate stubs' -> 'generate project' -> 'run'.");
+    // The same import the editor performs behind "Configure project". Without
+    // it the CLI could only be pointed at a build directory somebody else had
+    // already prepared, which on Windows is most of the work.
+    configureCommand = app.add_subcommand(
+            "configure", "Configure the project and write its build databases.");
     app.require_subcommand(0, 1);
 }
 
@@ -47,6 +52,10 @@ CLI::App *Commands::MainCommands::getGenerateCommand() {
 
 CLI::App *Commands::MainCommands::getAllCommand() {
     return allCommand;
+}
+
+CLI::App *Commands::MainCommands::getConfigureCommand() {
+    return configureCommand;
 }
 
 
