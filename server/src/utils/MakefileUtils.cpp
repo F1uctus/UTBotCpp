@@ -32,7 +32,7 @@ namespace MakefileUtils {
     MakefileCommand::MakefileCommand(const utbot::ProjectContext &projectContext,
                                      fs::path makefile,
                                      std::string target,
-                                     const std::string &gtestFlags,
+                                     const std::vector<std::pair<std::string, std::string>> &gtestFlags,
                                      std::vector<std::string> env)
             : makefile(std::move(makefile)), target(std::move(target)),
               projectName(projectContext.projectName) {
@@ -42,7 +42,9 @@ namespace MakefileUtils {
         logFile = logDir / "makefile.log";
         fs::create_directories(logDir);
         std::vector<std::string> argv = std::move(env);
-        argv.emplace_back(std::string("GTEST_FLAGS=") + gtestFlags);
+        for (const auto &[variable, value] : gtestFlags) {
+            argv.emplace_back(variable + "=" + value);
+        }
         std::vector<std::string> makeCommand = getMakeCommand(this->makefile, this->target, false);
         argv.insert(argv.begin(), makeCommand.begin(), makeCommand.end());
         runCommand = ShellExecTask::ExecutionParameters("env", argv);

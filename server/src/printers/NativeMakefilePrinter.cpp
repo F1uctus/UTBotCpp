@@ -456,7 +456,8 @@ namespace printer {
         declareTarget("bin", { TARGET_FORCE }, { stringFormat("echo %s",
                                                        getRelativePath(coverageInfoBinary)) });
 
-        utbot::RunCommand testRunCommand{ { getRelativePath(testExecutablePath), "$(GTEST_FLAGS)" },
+        utbot::RunCommand testRunCommand{ { getRelativePath(testExecutablePath),
+                                            "$(GTEST_FILTER_FLAG)", "$(GTEST_OUTPUT_FLAG)" },
                                           getRelativePath(buildDirectory) };
         testRunCommand.addEnvironmentVariable("PATH", "$$PATH:$(pwd)");
         if (primaryCompilerName == CompilationUtils::CompilerName::GCC) {

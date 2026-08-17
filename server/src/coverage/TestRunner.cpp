@@ -46,9 +46,13 @@ TestRunner::TestRunner(
 std::vector<UnitTest> TestRunner::getTestsFromMakefile(const fs::path &makefile,
                                                        const fs::path &testFilePath,
                                                        const std::string &filter) {
+    // Listing rather than running, so the flag goes in the slot the recipe
+    // reads first and the output slot is left empty; the filter itself comes
+    // through gtest's own environment variable below.
     auto cmdGetAllTests = MakefileUtils::MakefileCommand(projectContext, makefile,
                                                          printer::DefaultMakefilePrinter::TARGET_RUN,
-                                                         "--gtest_list_tests", {"GTEST_FILTER=" + filter});
+                                                         {{"GTEST_FILTER_FLAG", "--gtest_list_tests"}},
+                                                         {"GTEST_FILTER=" + filter});
     auto [out, status, _] = cmdGetAllTests.run(projectContext.getBuildDirAbsPath(), false);
     if (status != 0) {
         auto [err, _, logFilePath] = cmdGetAllTests.run(projectContext.getBuildDirAbsPath(), true);
@@ -195,7 +199,7 @@ bool TestRunner::buildTest(const utbot::ProjectContext &projectContext, const fs
     fs::path makefile = Paths::getMakefilePathFromSourceFilePath(projectContext, sourcePath);
     if (fs::exists(makefile)) {
         auto command = MakefileUtils::MakefileCommand(projectContext, makefile,
-                                                      printer::DefaultMakefilePrinter::TARGET_BUILD, "", {});
+                                                      printer::DefaultMakefilePrinter::TARGET_BUILD, {}, {});
         LOG_S(DEBUG) << "Try compile tests for: " << sourcePath.string();
         auto [out, status, logFilePath] = command.run(projectContext.getBuildDirAbsPath(), true);
         if (status != 0) {

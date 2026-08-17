@@ -33,10 +33,27 @@ std::unique_ptr<CoverageTool> getCoverageTool(const std::string &compileCommands
     }
 }
 
-std::string CoverageTool::getGTestFlags(const UnitTest &unitTest) const {
-    std::string gtestFilterFlag = StringUtils::stringFormat("\"--gtest_filter=*.%s\"", unitTest.testname);
-    std::string gtestOutputFlag = StringUtils::stringFormat("\"--gtest_output=json:%s\"",
-                                                            Paths::getGTestResultsJsonPath(projectContext));
-    std::vector<std::string> gtestFlagsList = { gtestFilterFlag, gtestOutputFlag };
-    return StringUtils::joinWith(gtestFlagsList, " ");
+/// One make variable per flag, rather than one variable holding both.
+///
+/// A value with a space in it does not survive the trip. make escapes the
+/// space when it writes the assignment into MAKEFLAGS for the sub-make that
+/// the generated makefiles invoke, and the escape it uses is a backslash --
+/// which the bundled busybox rewrites to a forward slash on the way through,
+/// because that is what it does to backslashes in arguments on Windows. The
+/// escape gone, the sub-make reads the value as ending at the space, so the
+/// second flag arrives as a stray word and the first keeps the slash. The
+/// result was a filter that matched no test and no --gtest_output at all, so
+/// no results file was written and every test was reported as having died.
+///
+/// Each flag stays quoted: --gtest_filter carries a '*' that the shell would
+/// otherwise try to glob.
+std::vector<std::pair<std::string, std::string>>
+CoverageTool::getGTestFlags(const UnitTest &unitTest) const {
+    return {
+        { "GTEST_FILTER_FLAG",
+          StringUtils::stringFormat("\"--gtest_filter=*.%s\"", unitTest.testname) },
+        { "GTEST_OUTPUT_FLAG",
+          StringUtils::stringFormat("\"--gtest_output=json:%s\"",
+                                    Paths::getGTestResultsJsonPath(projectContext)) },
+    };
 }

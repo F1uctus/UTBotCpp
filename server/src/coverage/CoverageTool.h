@@ -22,7 +22,11 @@ protected:
     ProgressWriter const *progressWriter;
     const utbot::ProjectContext projectContext;
 
-    [[nodiscard]] std::string getGTestFlags(const UnitTest &unitTest) const;
+    /// The gtest flags for one test run, as (make variable, value) pairs --
+    /// one variable each, because a single variable holding both does not
+    /// survive the sub-make the generated makefiles invoke. See the definition.
+    [[nodiscard]] std::vector<std::pair<std::string, std::string>>
+    getGTestFlags(const UnitTest &unitTest) const;
 
 public:
     CoverageTool(utbot::ProjectContext projectContext, ProgressWriter const *progressWriter);
