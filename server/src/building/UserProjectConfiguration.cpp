@@ -102,6 +102,14 @@ UserProjectConfiguration::RunProjectConfigurationCommands(const fs::path &buildD
                                                    Paths::getUTBotClang().string());
             cmakeOptionsWithMandatory.emplace_back("-DCMAKE_CXX_COMPILER=" +
                                                    Paths::getUTBotClangPP().string());
+            // And ask for the compile database. CMake does not write one
+            // unless it is told to; everywhere else Bear produces it by
+            // watching the build, and there is no Bear here to do that. The
+            // file API answers about targets and how they are linked, not
+            // about how each translation unit is compiled, so without this
+            // there is nothing to join it with -- and the import failed on an
+            // empty compile_commands.json.
+            cmakeOptionsWithMandatory.emplace_back("-DCMAKE_EXPORT_COMPILE_COMMANDS=ON");
 #endif
             cmakeOptionsWithMandatory.emplace_back("..");
 
