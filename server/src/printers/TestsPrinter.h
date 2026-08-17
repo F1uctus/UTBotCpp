@@ -128,6 +128,10 @@ namespace printer {
         parametrizedInitializeGlobalVariables(const Tests::MethodDescription &methodDescription,
                                               const Tests::MethodTestCase &testCase);
 
+        /// Puts every stand-in back at its first recorded answer, so that a
+        /// test replays its own path rather than continuing the previous one.
+        void resetMockedFunctionCounters(const Tests::MethodDescription &methodDescription);
+
         void parametrizedInitializeSymbolicStubs(const Tests::MethodDescription &methodDescription,
                                                  const Tests::MethodTestCase &testCase);
 

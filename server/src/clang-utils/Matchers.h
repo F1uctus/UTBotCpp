@@ -35,6 +35,9 @@ namespace Matchers {
     static inline const std::string FUNCTION_USED_GLOBAL_VARIABLE = "function_used_global_variable";
     static inline const std::string GLOBAL_VARIABLE_USAGE = "global_varaiable_usage";
 
+    static inline const std::string FUNCTION_USED_MOCKED_FUNCTION = "function_used_mocked_function";
+    static inline const std::string MOCKED_FUNCTION_USAGE = "mocked_function_usage";
+
     static inline const std::string SUBSCRIPT = "subscript";
     static inline const std::string RETURN = "return";
 
@@ -65,6 +68,13 @@ namespace Matchers {
     extern const DeclarationMatcher anyToplevelDeclarationMatcher;
 
     extern const DeclarationMatcher globalVariableUsageMatcher;
+
+    /// Calls, from a function defined in the file being parsed, to a function
+    /// that may turn out to have no definition anywhere -- the shape a driver
+    /// or HAL entry point has. Whether it really is undefined is decided by the
+    /// callback, which can see the declaration; the matcher only excludes
+    /// system headers, whose declarations are backed by a library that links.
+    extern const DeclarationMatcher mockedFunctionUsageMatcher;
 
     extern const StatementMatcher arraySubscriptMatcher;
     extern const StatementMatcher returnMatcher;

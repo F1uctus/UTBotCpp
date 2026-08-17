@@ -137,6 +137,14 @@ namespace Matchers {
         ))
     ).bind(FUNCTION_USED_GLOBAL_VARIABLE);
 
+    const DeclarationMatcher mockedFunctionUsageMatcher = functionDecl(functionDefinitionTraits,
+        forEachDescendant(callExpr(
+            callee(
+                functionDecl(unless(isExpansionInSystemHeader())).bind(MOCKED_FUNCTION_USAGE)
+            )
+        ))
+    ).bind(FUNCTION_USED_MOCKED_FUNCTION);
+
     const StatementMatcher arraySubscriptMatcher = arraySubscriptExpr(isExpansionInMainFile()).bind(SUBSCRIPT);
     const StatementMatcher returnMatcher = returnStmt(isExpansionInMainFile()).bind(RETURN);
 }

@@ -626,6 +626,14 @@ namespace tests {
         std::vector<std::string> commentBlocks{};
         std::string stubs; // language-independent stubs definitions
 
+        /// Functions this file calls that nothing defines, by name.
+        ///
+        /// KLEE answers such a call with a symbolic value rather than
+        /// dispatching it, and reports the value under the callee's name. A
+        /// generated test replays that value by standing in for the callee,
+        /// which is what these signatures are kept for.
+        std::unordered_map<std::string, std::shared_ptr<types::FunctionInfo>> mockedFunctions;
+
         std::uint32_t errorMethodsNumber;
         std::uint32_t regressionMethodsNumber;
 
@@ -831,6 +839,12 @@ namespace tests {
                                    Tests::TestCaseDescription &testCaseDescription,
                                    const std::unordered_map<std::string, types::Type> &methodNameToReturnTypeMap,
                                    std::vector<RawKleeParam> &rawKleeParams);
+
+        /// Gathers what KLEE answered each mocked call with into one array per
+        /// callee, in call order, for the test file's stand-in to read back.
+        void processMockedFunctionValues(const Tests::MethodDescription &methodDescription,
+                                         Tests::TestCaseDescription &testCaseDescription,
+                                         const std::vector<RawKleeParam> &rawKleeParams);
 
         static void addToOrder(const std::vector<UTBotKTestObject> &objects,
                                const std::string &paramName,

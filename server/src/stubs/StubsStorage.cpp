@@ -19,3 +19,19 @@ StubsStorage::getFunctionInfoByKTestObjectName(const std::string &objectName) co
 std::unordered_set<std::string> StubsStorage::getStubsHeaders() {
     return _stubsHeaders;
 }
+
+void StubsStorage::registerMockedFunction(const std::shared_ptr<types::FunctionInfo> &functionInfo) {
+    // Keyed by the bare function name: that is what KLEE calls the object it
+    // records the mocked value in, and matching it is the whole point.
+    _mockedFunctions[functionInfo->name] = functionInfo;
+}
+
+std::optional<std::shared_ptr<types::FunctionInfo>>
+StubsStorage::getMockedFunctionByKTestObjectName(const std::string &objectName) const {
+    return CollectionUtils::getOptionalValue(_mockedFunctions, objectName);
+}
+
+const std::unordered_map<std::string, std::shared_ptr<types::FunctionInfo>> &
+StubsStorage::getMockedFunctions() const {
+    return _mockedFunctions;
+}

@@ -583,6 +583,43 @@ namespace printer {
         }
     }
 
+    std::unordered_set<std::string>
+    printer::Printer::mockedFunctionVarNames(const Tests::MethodDescription &testMethod) {
+        std::unordered_set<std::string> recorded;
+        for (const auto &testCase: testMethod.testCases) {
+            for (const auto &value: testCase.stubValues) {
+                recorded.insert(value.name);
+            }
+        }
+
+        std::unordered_set<std::string> names;
+        for (const auto &[functionName, _]: testMethod.stubsStorage->getMockedFunctions()) {
+            std::string varName = StubsUtils::getMockedFunctionVarName(functionName);
+            // A function nothing on the explored paths called has no values to
+            // replay, so it gets no stand-in and no array.
+            if (CollectionUtils::contains(recorded, varName)) {
+                names.insert(std::move(varName));
+            }
+        }
+        return names;
+    }
+
+    void printer::Printer::writeExternForMockedFunctionCounters(
+        const Tests::MethodDescription &testMethod) {
+        // The arrays themselves are declared by writeExternForSymbolicStubs,
+        // which cannot see the counters: they carry no values and so never
+        // appear in a test case. They are declared here for the same reason --
+        // the stand-in that owns them lives in the wrapper, not here.
+        const std::unordered_set<std::string> needed = mockedFunctionVarNames(testMethod);
+        for (const auto &[functionName, _]: testMethod.stubsStorage->getMockedFunctions()) {
+            if (CollectionUtils::contains(needed,
+                                          StubsUtils::getMockedFunctionVarName(functionName))) {
+                strDeclareVar("int", StubsUtils::getMockedFunctionCounterName(functionName),
+                              std::nullopt, std::nullopt, true, 0, ExternType::C);
+            }
+        }
+    }
+
     void printer::Printer::writeStubForParam(const types::TypesHandler *typesHandler,
                                              const std::shared_ptr<types::FunctionInfo> &fInfo,
                                              const std::string &methodName,

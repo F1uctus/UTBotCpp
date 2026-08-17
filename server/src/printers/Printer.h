@@ -213,6 +213,14 @@ namespace printer {
 
         void writeExternForSymbolicStubs(const Tests::MethodDescription &testMethod);
 
+        /// Declares the call counters the wrapper's stand-ins keep, so that a
+        /// test can put them back to the first answer before it runs.
+        void writeExternForMockedFunctionCounters(const Tests::MethodDescription &testMethod);
+
+        /// The names of the arrays the stand-ins above read from.
+        static std::unordered_set<std::string>
+        mockedFunctionVarNames(const Tests::MethodDescription &testMethod);
+
         void writeStubsForStructureFields(const Tests &tests);
 
         void writeStubsForParameters(const Tests &tests);

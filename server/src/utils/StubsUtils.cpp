@@ -29,6 +29,16 @@ namespace StubsUtils {
         return stubName;
     }
 
+    std::string getMockedFunctionVarName(const std::string &methodName) {
+        std::string name = methodName + "_utbot_mock";
+        StringUtils::replaceColon(name);
+        return name;
+    }
+
+    std::string getMockedFunctionCounterName(const std::string &methodName) {
+        return getMockedFunctionVarName(methodName) + "_call";
+    }
+
     std::string getStubSymbolicVarName(const std::string &methodName, const std::string &parentMethodName) {
         std::string stubName;
         if (!parentMethodName.empty()) {

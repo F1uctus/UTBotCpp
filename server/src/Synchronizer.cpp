@@ -243,7 +243,15 @@ void Synchronizer::synchronizeWrappers(const CollectionUtils::FileSet &outdatedS
                                                           testGen->getProjectBuildDatabase()->compilationDatabase, nullptr,
                                                           testGen->serverBuildDir, typesHandler);
             std::string wrapper = sourceToHeaderRewriter.generateWrapper(sourceFilePath);
-            printer::SourceWrapperPrinter(Paths::getSourceLanguage(sourceFilePath)).print(testGen->projectContext, sourceFilePath, wrapper);
+            // The fetcher has already run, so what this file calls and nothing
+            // defines is known; the stand-ins for those go in beside the
+            // wrapper's own definitions.
+            std::unordered_map<std::string, std::shared_ptr<types::FunctionInfo>> mockedFunctions;
+            if (auto it = testGen->tests.find(sourceFilePath); it != testGen->tests.end()) {
+                mockedFunctions = it->second.mockedFunctions;
+            }
+            printer::SourceWrapperPrinter(Paths::getSourceLanguage(sourceFilePath))
+                .print(testGen->projectContext, sourceFilePath, wrapper, mockedFunctions);
         });
 }
 

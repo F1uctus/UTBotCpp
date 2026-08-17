@@ -1187,6 +1187,60 @@ void KTestObjectParser::processStubParamValue(
             testCaseDescription.stubValuesTypes.emplace_back(stubType, kleeParam.paramName, std::nullopt);
         }
     }
+    processMockedFunctionValues(methodDescription, testCaseDescription, rawKleeParams);
+}
+
+void KTestObjectParser::processMockedFunctionValues(
+        const Tests::MethodDescription &methodDescription,
+        Tests::TestCaseDescription &testCaseDescription,
+        const std::vector<RawKleeParam> &rawKleeParams) {
+    // A mocked call is answered one call at a time, so the run leaves one
+    // object per call, all under the callee's name and in the order they were
+    // answered. The stand-in in the test file reads a single array, so they are
+    // laid end to end here, in that order.
+    std::unordered_map<std::string, std::vector<char>> answers;
+    std::vector<std::string> order;
+    for (const auto &kleeParam: rawKleeParams) {
+        if (!methodDescription.stubsStorage
+                 ->getMockedFunctionByKTestObjectName(kleeParam.paramName)
+                 .has_value()) {
+            continue;
+        }
+        auto [it, inserted] = answers.try_emplace(kleeParam.paramName);
+        if (inserted) {
+            order.push_back(kleeParam.paramName);
+        }
+        it->second.insert(it->second.end(), kleeParam.rawData.begin(), kleeParam.rawData.end());
+    }
+
+    const size_t capacity =
+        types::TypesHandler::getElementsNumberInPointerOneDim(types::PointerUsage::PARAMETER);
+    for (const auto &functionName: order) {
+        auto functionInfo =
+            methodDescription.stubsStorage->getMockedFunctionByKTestObjectName(functionName).value();
+        types::Type mockType = types::Type::createArray(functionInfo->returnType);
+        std::vector<char> &bytes = answers[functionName];
+
+        // The array is a fixed size the stand-in was written against. A run
+        // that answered fewer calls than it holds leaves the rest zero, which
+        // no path this test replays ever reads; one that answered more is
+        // beyond what the stand-in can hold, and the extra answers are dropped
+        // rather than silently shifting the ones that matter.
+        const size_t elementSize = typesHandler.typeSize(functionInfo->returnType) / 8;
+        if (elementSize == 0) {
+            continue;
+        }
+        bytes.resize(capacity * elementSize, 0);
+
+        std::string varName = StubsUtils::getMockedFunctionVarName(functionName);
+        RawKleeParam mockParam{varName, bytes, {}};
+        Tests::TypeAndVarName typeAndVarName{mockType, varName};
+        auto testParamView =
+                testParameterView(mockParam, typeAndVarName, types::PointerUsage::PARAMETER,
+                                  testCaseDescription.objects, testCaseDescription.lazyReferences);
+        testCaseDescription.stubValues.emplace_back(varName, 0, testParamView);
+        testCaseDescription.stubValuesTypes.emplace_back(mockType, varName, std::nullopt);
+    }
 }
 
 std::shared_ptr<AbstractValueView> KTestObjectParser::testParameterView(

@@ -267,7 +267,6 @@ KleeRunner::createKleeParams(const tests::TestMethod &testMethod,
         "--fp-runtime",
         "--only-output-states-covering-new",
         "--allocate-determ",
-        "--external-calls=all",
         "--timer-interval=1000ms",
         "--use-cov-check=instruction-based",
         "-istats-write-interval=5s",
@@ -285,6 +284,32 @@ KleeRunner::createKleeParams(const tests::TestMethod &testMethod,
         "--max-memory=" + std::to_string(maxMemoryMegabytes),
         "--output-dir=" + kleeOut.string()
     };
+    if (KleeOptions::targetHasUnitTestBotExtensions()) {
+        // The fork answers an external call out of its own model.
+        argvData.emplace_back("--external-calls=all");
+    } else {
+        // Without that model, an external call is a wall. Concretising the
+        // arguments and calling through -- which is what --external-calls=all
+        // asks for -- means calling a function that was never linked in, and
+        // the state dies there with "failed external call". For code written
+        // against a driver or a HAL that is the first line of the function,
+        // so nothing past it is ever explored.
+        //
+        // Mock them instead: a mocked call returns a fresh symbolic value, so
+        // the branches that read it stay reachable. On a function reading one
+        // value through an unlinked driver and branching three ways, this is
+        // the difference between one dead path and all three explored.
+        //
+        // Deterministic rather than naive, because a generated test is a
+        // promise about what the function does. Naive lets two reads of the
+        // same driver disagree, so it produces a test that calls the function
+        // with one set of arguments and expects a result only reachable if the
+        // driver answered two ways -- a test that fails when it is run. Under
+        // deterministic those paths do not exist to be reported.
+        argvData.emplace_back("--external-calls=none");
+        argvData.emplace_back("--mock-policy=all");
+        argvData.emplace_back("--mock-strategy=deterministic");
+    }
     if (Paths::isCXXFile(testMethod.sourceFilePath)) {
         argvData.emplace_back("--use-advanced-type-system=true");
 //        argvData.emplace_back("--libcxx=true");
@@ -307,18 +332,17 @@ KleeRunner::createKleeParams(const tests::TestMethod &testMethod,
         // that used its whole budget produced an empty result.
         argvData.emplace_back(
             "--max-time=" + std::to_string(settingsContext.timeoutPerFunction->count()) + "s");
-#ifndef _WIN32
         // --max-time is only checked between instructions, so a run that is
-        // inside one long solver query sails past it: on T1100 about one
-        // function in twenty ran until the external kill instead, and those few
-        // took the majority of the wall clock. The watchdog is a second process
-        // that enforces the deadline from outside, which is the only thing that
-        // can.
+        // inside one long solver query sails past it: on a large project about
+        // one function in twenty ran until the external kill instead, and those
+        // few took the majority of the wall clock. The watchdog is a second
+        // process that enforces the deadline from outside, which is the only
+        // thing that can.
         //
-        // It forks, so it is POSIX-only; on Windows the external kill stays the
-        // sole enforcement, which is why that is sized as a backstop.
+        // It asks the run to stop before it kills it, so the states in flight
+        // are still written out as test cases; the external kill below stays
+        // only as the backstop for a KLEE that does not answer either.
         argvData.emplace_back("--watchdog");
-#endif
     }
     if (testMethod.is32bits) {
         // 32bit project

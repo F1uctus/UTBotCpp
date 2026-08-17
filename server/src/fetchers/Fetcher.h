@@ -29,6 +29,7 @@ public:
     friend class TypeDeclsMatchCallback;
     friend class FunctionDeclsMatchCallback;
     friend class GlobalVariableUsageMatchCallback;
+    friend class MockedFunctionUsageMatchCallback;
     friend class ArraySubscriptFetcherMatchCallback;
     friend class ReturnStmtFetcherMatchCallback;
     friend class IncludeFetchSourceFileCallbacks;

@@ -185,6 +185,7 @@ void TestsPrinter::genCode(Tests::MethodDescription &methodDescription,
 
     writeStubsForFunctionParams(typesHandler, methodDescription, false);
     writeExternForSymbolicStubs(methodDescription);
+    writeExternForMockedFunctionCounters(methodDescription);
 
     methodDescription.stubsText = ss.str();
     resetStream();
@@ -478,6 +479,8 @@ void TestsPrinter::verboseParameters(const Tests::MethodDescription &methodDescr
     }
 
     genInitCall(methodDescription);
+
+    resetMockedFunctionCounters(methodDescription);
 
     std::vector<std::vector<tests::Tests::MethodParam>> types = {testCase.stubValuesTypes, testCase.stubParamTypes};
     std::vector<std::vector<tests::Tests::TestCaseParamValue>> values = {testCase.stubValues, testCase.stubParamValues};
@@ -835,8 +838,23 @@ void printer::TestsPrinter::parametrizedInitializeGlobalVariables(const Tests::M
     }
 }
 
+void printer::TestsPrinter::resetMockedFunctionCounters(
+    const Tests::MethodDescription &methodDescription) {
+    // Every test in the binary reads from the same stand-in, and each one
+    // replays its own path from the first call. Without this, a test would
+    // start wherever the test before it stopped and read the wrong answers.
+    const std::unordered_set<std::string> needed = mockedFunctionVarNames(methodDescription);
+    for (const auto &[functionName, _]: methodDescription.stubsStorage->getMockedFunctions()) {
+        if (CollectionUtils::contains(needed,
+                                      StubsUtils::getMockedFunctionVarName(functionName))) {
+            strAssignVar(StubsUtils::getMockedFunctionCounterName(functionName), "0");
+        }
+    }
+}
+
 void printer::TestsPrinter::parametrizedInitializeSymbolicStubs(const Tests::MethodDescription &methodDescription,
                                                                 const Tests::MethodTestCase &testCase) {
+    resetMockedFunctionCounters(methodDescription);
     for (auto i = 0; i < testCase.stubValues.size(); i++) {
         const auto &param = testCase.stubValuesTypes[i];
         const auto &value = testCase.stubValues[i];

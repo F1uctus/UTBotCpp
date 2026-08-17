@@ -4,6 +4,7 @@
 #include "FunctionDeclsMatchCallback.h"
 #include "GlobalVariableUsageMatchCallback.h"
 #include "IncludeFetchSourceFileCallback.h"
+#include "MockedFunctionUsageMatchCallback.h"
 #include "Paths.h"
 #include "ReturnStmtFetcherMatchCallback.h"
 #include "SingleFileParseModeCallback.h"
@@ -39,6 +40,7 @@ Fetcher::Fetcher(Options options,
         addMatcher<FunctionDeclsMatchCallback>(constructorDefinitionMatcher, false, false, false);
         addMatcher<FunctionDeclsMatchCallback>(memberConstructorDefinitionMatcher, false, false, false);
         addMatcher<FunctionDeclsMatchCallback>(functionDefinitionMatcher, false, false, false);
+        addMatcher<MockedFunctionUsageMatchCallback>(mockedFunctionUsageMatcher);
     }
     if (options.has(Options::Value::GLOBAL_VARIABLE_USAGE)) {
         addMatcher<GlobalVariableUsageMatchCallback>(globalVariableUsageMatcher);
@@ -87,6 +89,38 @@ void Fetcher::fetchWithProgress(const ProgressWriter *progressWriter,
 }
 
 void Fetcher::postProcess() const {
+    if (options.has(Options::Value::FUNCTION)) {
+        // A callee is recorded at its call site, where only this translation
+        // unit is in view, so one defined in a sibling source of the same
+        // project still looks undefined there. Standing in for such a function
+        // would replace working code with recorded answers, so anything the
+        // parse found a definition for anywhere is dropped first.
+        std::unordered_set<std::string> defined;
+        for (auto projectTestsIterator = projectTests->begin();
+             projectTestsIterator != projectTests->end(); projectTestsIterator++) {
+            for (const auto &[methodName, _] : projectTestsIterator.value().methods) {
+                defined.insert(methodName);
+            }
+        }
+
+        // Which method really did call it is not decided here: every method of
+        // the file reaches the same storage, and only one whose run came back
+        // with a value under that name has anything to replay.
+        for (auto projectTestsIterator = projectTests->begin();
+             projectTestsIterator != projectTests->end(); projectTestsIterator++) {
+            tests::Tests &tests = projectTestsIterator.value();
+            for (auto it = tests.mockedFunctions.begin(); it != tests.mockedFunctions.end();) {
+                it = CollectionUtils::contains(defined, it->first)
+                         ? tests.mockedFunctions.erase(it)
+                         : std::next(it);
+            }
+            for (auto it = tests.methods.begin(); it != tests.methods.end(); it++) {
+                for (const auto &[_, functionInfo] : tests.mockedFunctions) {
+                    it.value().stubsStorage->registerMockedFunction(functionInfo);
+                }
+            }
+        }
+    }
     if (options.has(Options::Value::FUNCTION) && maximumAlignment != nullptr) {
         // TODO maybe this is useless?
         for (auto projectTestsIterator = projectTests->begin();
