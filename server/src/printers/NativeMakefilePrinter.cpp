@@ -467,7 +467,23 @@ namespace printer {
         utbot::RunCommand testRunCommand{ { getRelativePath(testExecutablePath),
                                             "$(GTEST_FILTER_FLAG)", "$(GTEST_OUTPUT_FLAG)" },
                                           getRelativePath(buildDirectory) };
+#ifdef _WIN32
+        // Windows records only a DLL's base name in the import table, so the
+        // directory holding the freshly built library has to be searchable
+        // when the test starts -- and what Windows searches is PATH, whose
+        // entries are separated by ';'. The bundled toolchain's bin is already
+        // on it from the makefile preamble, which is what answers for the
+        // dynamic ASan runtime.
+        // Quoted, because ';' is how a POSIX shell separates two commands and
+        // the busybox reading this recipe is a POSIX shell: unquoted, the
+        // assignment would end at the separator and the rest of the line would
+        // be run as a command of its own.
+        testRunCommand.addEnvironmentVariable(
+                "PATH",
+                "\"" + getRelativePath(sharedOutput.value().parent_path()).string() + ";$$PATH\"");
+#else
         testRunCommand.addEnvironmentVariable("PATH", "$$PATH:$(pwd)");
+#endif
         if (primaryCompilerName == CompilationUtils::CompilerName::GCC) {
             testRunCommand.addEnvironmentVariable("LD_PRELOAD",
                                                   getRelativePath(Paths::getAsanLibraryPath()).string() + ":${LD_PRELOAD}");
