@@ -50,6 +50,24 @@ namespace Paths {
 
     namespace {
         /**
+         * Names a program the way the filesystem has it.
+         *
+         * Spawning tolerates the bare stem, because CreateProcess appends the
+         * extension while it searches -- which is why this was missing for so
+         * long. Anything that looks the path up instead of running it does
+         * not: CMake refuses a CMAKE_C_COMPILER it cannot see at exactly the
+         * path it was handed, and fs::exists is likewise answering about a
+         * file that is not there under that name.
+         */
+        fs::path executableName(const fs::path &path) {
+#ifdef _WIN32
+            return fs::path(path.string() + ".exe");
+#else
+            return path;
+#endif
+        }
+
+        /**
          * A tool from the toolchain that compiles the user's code.
          *
          * On Windows that is a separate tree from the install prefix, and the
@@ -70,7 +88,7 @@ namespace Paths {
          */
         fs::path userToolchainTool(const std::string &name) {
 #ifdef _WIN32
-            return getUTBotToolchainDir() / "bin" / ("x86_64-w64-mingw32-" + name);
+            return executableName(getUTBotToolchainDir() / "bin" / ("x86_64-w64-mingw32-" + name));
 #else
             return getUTBotInstallDir() / "bin" / name;
 #endif
@@ -78,7 +96,7 @@ namespace Paths {
 
         fs::path userToolchainUtility(const std::string &name) {
 #ifdef _WIN32
-            return getUTBotToolchainDir() / "bin" / name;
+            return executableName(getUTBotToolchainDir() / "bin" / name);
 #else
             return getUTBotInstallDir() / "bin" / name;
 #endif
@@ -90,7 +108,7 @@ namespace Paths {
     }
 
     fs::path getKlee() {
-        return getUTBotInstallDir() / "bin" / "klee";
+        return executableName(getUTBotInstallDir() / "bin" / "klee");
     }
 
     fs::path getUTBotDebsInstallDir() {
@@ -110,11 +128,11 @@ namespace Paths {
     }
 
     fs::path getCMake() {
-        return getUTBotInstallDir() / "bin" / "cmake";
+        return executableName(getUTBotInstallDir() / "bin" / "cmake");
     }
 
     fs::path getNinja() {
-        return getUTBotInstallDir() / "bin" / "ninja";
+        return executableName(getUTBotInstallDir() / "bin" / "ninja");
     }
 
     fs::path getMake() {
@@ -122,7 +140,7 @@ namespace Paths {
         // Windows has no make of its own, so the distribution carries one and
         // the generated makefiles are driven by that rather than by whatever
         // the user happens to have on PATH.
-        return getUTBotRootDir() / "bin" / "make";
+        return executableName(getUTBotRootDir() / "bin" / "make");
 #else
         return "make";
 #endif
@@ -134,7 +152,7 @@ namespace Paths {
         // "cmd && { cmd; exit $?; }". The distribution carries a busybox that
         // dispatches on argv[0], so the copy named sh.exe is a shell; make
         // recognises the name and quotes recipes the Unix way because of it.
-        return getUTBotRootDir() / "bin" / "sh.exe";
+        return executableName(getUTBotRootDir() / "bin" / "sh");
 #else
         return "/bin/sh";
 #endif
@@ -181,7 +199,7 @@ namespace Paths {
     }
 
     fs::path getLLVMLink() {
-        return getUTBotInstallDir() / "bin" / "llvm-link";
+        return executableName(getUTBotInstallDir() / "bin" / "llvm-link");
     }
 
     fs::path getObjcopy() {
