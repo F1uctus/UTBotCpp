@@ -30,6 +30,16 @@ int main(int argc, char **argv) {
     } catch (const CLI::ParseError &e) {
         std::cout << (e.get_exit_code() == 0 ? rang::fg::green : rang::fg::red);
         return app.exit(e);
+    } catch (const std::exception &e) {
+        // Anything the command threw and did not handle. Without this it
+        // reached the runtime's terminate handler, which on Windows prints an
+        // exception code and a stack trace and no message at all -- so the one
+        // thing that would say what went wrong, the what(), was the one thing
+        // not shown.
+        std::cout << rang::fg::red;
+        LOG_S(ERROR) << e.what();
+        std::cout << rang::style::reset;
+        return 1;
     }
     return 0;
 }
