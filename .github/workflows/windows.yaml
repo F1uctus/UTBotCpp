@@ -944,6 +944,77 @@ jobs:
           if (-not $generated) { throw 'the imported project generated no tests' }
           Write-Host "Generated from the CMake project: $($generated.Name -join ', ')"
 
+      - name: Smoke test -- drive the server the way the extension does
+        timeout-minutes: 45
+        run: |
+          # Everything else here reaches the server through its command line.
+          # The editor never does: it opens a gRPC channel and sends
+          # ConfigureProject and GenerateProjectTests, and reads the answers off
+          # a stream. That path had never been exercised on Windows at all, and
+          # a break in it -- a field read differently, a stream that never ends,
+          # a path spelled for the wrong platform -- is invisible to a test that
+          # runs a subcommand.
+          $proj = Join-Path $env:RUNNER_TEMP 'e2efixture'
+          Remove-Item -LiteralPath $proj -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path (Join-Path $proj 'src') -Force | Out-Null
+          @(
+            'cmake_minimum_required(VERSION 3.16)',
+            'project(e2e C)',
+            'add_library(bounds STATIC src/bounds.c)',
+            'target_include_directories(bounds PUBLIC src)',
+            'add_executable(app src/main.c)',
+            'target_link_libraries(app bounds)'
+          ) | Set-Content -LiteralPath (Join-Path $proj 'CMakeLists.txt') -Encoding ascii
+          @(
+            'int band(int value) {',
+            '    if (value > 100) return 2;',
+            '    if (value > 10) return 1;',
+            '    return 0;',
+            '}'
+          ) | Set-Content -LiteralPath (Join-Path $proj 'src\bounds.c') -Encoding ascii
+          @('int band(int);', 'int main(void) { return band(7); }') |
+            Set-Content -LiteralPath (Join-Path $proj 'src\main.c') -Encoding ascii
+
+          $utbot = Join-Path $env:UTBOT_ALL 'bin\utbot.exe'
+          $logs = Join-Path $env:RUNNER_TEMP 'e2elogs'
+          New-Item -ItemType Directory -Path $logs -Force | Out-Null
+          $serverOut = Join-Path $logs 'server.out'
+          $server = Start-Process -FilePath $utbot `
+            -ArgumentList @('--log', $logs, '-v', 'info', 'server', '--port', '2121') `
+            -PassThru -RedirectStandardOutput $serverOut `
+            -RedirectStandardError (Join-Path $logs 'server.err') -NoNewWindow
+
+          try {
+            # Wait for the port rather than for a fixed time: the server binds
+            # after it has set up its logging, and how long that takes is not
+            # ours to predict.
+            $listening = $false
+            foreach ($attempt in 1..60) {
+              Start-Sleep -Seconds 1
+              if ($server.HasExited) { throw "the server exited with $($server.ExitCode)" }
+              if (Test-NetConnection -ComputerName 127.0.0.1 -Port 2121 `
+                    -InformationLevel Quiet -WarningAction SilentlyContinue) {
+                $listening = $true; break
+              }
+            }
+            if (-not $listening) { throw 'the server never accepted a connection on 2121' }
+            Write-Host 'server is listening'
+
+            Push-Location (Join-Path $env:GITHUB_WORKSPACE 'vscode-plugin')
+            & node src\test\e2e\serverHandshake.js $proj 'tests' 2121
+            $status = $LASTEXITCODE
+            Pop-Location
+            if ($status -ne 0) { throw "the extension's protocol path failed ($status)" }
+          } finally {
+            if (-not $server.HasExited) { Stop-Process -Id $server.Id -Force }
+            foreach ($log in @($serverOut, (Join-Path $logs 'server.err'))) {
+              if ((Test-Path -LiteralPath $log) -and (Get-Item -LiteralPath $log).Length -gt 0) {
+                Write-Host "----- $log -----"
+                Get-Content -LiteralPath $log -Tail 40
+              }
+            }
+          }
+
       - name: Smoke test -- build and run the generated tests
         timeout-minutes: 30
         run: |
