@@ -35,6 +35,15 @@ const messages = require(path.join(stubs, 'testgen_pb'));
 const client = new services.TestsGenServiceClient(
     `127.0.0.1:${port}`, grpc.credentials.createInsecure());
 
+// Every call after registration carries the client id in metadata. The server
+// reads it to name the thread and to route the log channel, and refuses a
+// request that arrives without one -- "Tried to set thread options for unnamed
+// client" -- so registering alone is not enough. The extension attaches the
+// same header for the same reason.
+const CLIENT_ID = 'e2e';
+const metadata = new grpc.Metadata();
+metadata.add('clientId', CLIENT_ID);
+
 function fail(what, err) {
     console.error(`FAILED: ${what}: ${err && err.message ? err.message : err}`);
     process.exit(1);
@@ -44,7 +53,7 @@ const deadline = (seconds) => new Date(Date.now() + seconds * 1000);
 
 function unary(name, request, seconds) {
     return new Promise((resolve, reject) => {
-        client[name](request, { deadline: deadline(seconds) }, (err, response) =>
+        client[name](request, metadata, { deadline: deadline(seconds) }, (err, response) =>
             err ? reject(err) : resolve(response));
     });
 }
@@ -54,7 +63,7 @@ function unary(name, request, seconds) {
 // finished rather than merely started.
 function streamed(name, request, seconds, onData) {
     return new Promise((resolve, reject) => {
-        const call = client[name](request, { deadline: deadline(seconds) });
+        const call = client[name](request, metadata, { deadline: deadline(seconds) });
         const seen = [];
         call.on('data', (response) => { seen.push(response); if (onData) onData(response); });
         call.on('error', reject);
@@ -97,7 +106,7 @@ async function main() {
     console.log(`handshake: server reports ${handshake.getVersion()}`);
 
     const registration = new messages.RegisterClientRequest();
-    registration.setClientid('e2e');
+    registration.setClientid(CLIENT_ID);
     await unary('registerClient', registration, 30)
         .catch((err) => fail('registerClient', err));
     console.log('registered');
