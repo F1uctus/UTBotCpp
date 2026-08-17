@@ -312,7 +312,13 @@ namespace fs {
     }
 
     class directory_entry {
-        fs::path path_;
+        // Aliased, so that the name "path" is not used as a type inside a class
+        // that also declares a member function called path(). Naming one thing
+        // twice in one scope is ill formed -- [basic.scope.class] -- and a
+        // compiler is free to reject it, which GCC 14 does.
+        using path_type = ::fs::path;
+
+        path_type path_;
         std::filesystem::directory_entry entry_;
     public:
         explicit directory_entry(std::filesystem::directory_entry entry_) : path_(entry_.path()), entry_(std::move(entry_))  {}
@@ -321,7 +327,7 @@ namespace fs {
             return entry_.is_regular_file();
         }
 
-        const path& path() const noexcept {
+        const path_type& path() const noexcept {
             return path_;
         }
     };
