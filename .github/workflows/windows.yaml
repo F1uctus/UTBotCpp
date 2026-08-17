@@ -60,12 +60,34 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "checking out $module failed" }
           }
 
+      - name: Stamp the version both halves report
+        run: |
+          # The server takes its version from $VERSION at configure time and the
+          # extension from its package.json, so unless something sets both they
+          # keep their defaults -- 0.0.1 against whatever package.json happens
+          # to say -- and the two never agree. The client checks them against
+          # each other during the handshake, so every user of the distribution
+          # was greeted with "Versions are different".
+          #
+          # Same scheme the Linux release uses, where build-vsix.sh runs
+          # "npm version $VERSION" for exactly this reason.
+          $version = "{0}.{1}" -f (Get-Date -Format 'yyyy.M'), $env:GITHUB_RUN_NUMBER
+          "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "RUN_INFO=$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID" |
+            Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "Version: $version"
+
       - name: Build the VS Code extension
         run: |
           # Early, and before the hour of C++ ahead of it: this is the half of
           # the product the user actually drives, and a mistake here should not
           # cost a full build to find out about.
           Push-Location (Join-Path $env:GITHUB_WORKSPACE 'vscode-plugin')
+
+          # The version the server will report, so the handshake agrees.
+          # --allow-same-version because a rerun may land on the same number.
+          & npm version $env:VERSION --allow-same-version --no-git-tag-version
+          if ($LASTEXITCODE -ne 0) { throw 'stamping the extension version failed' }
 
           # npm install rather than npm ci: package-lock.json is not tracked.
           & npm install --no-audit --no-fund
