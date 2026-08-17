@@ -288,6 +288,14 @@ KleeRunner::createKleeParams(const tests::TestMethod &testMethod,
         // The fork answers an external call out of its own model.
         argvData.emplace_back("--external-calls=all");
     } else {
+        // The harness makes one object symbolic over a whole structure, so a
+        // pointer stored inside it is symbolic without anything having said it
+        // is a pointer. Left alone it resolves against every other object the
+        // run allocated, and the tests come out pointing a field at the value
+        // being returned. This is the fork's --skip-not-lazy-initialized under
+        // the name this KLEE gives it.
+        argvData.emplace_back("--lazy-init-on-deref");
+
         // Without that model, an external call is a wall. Concretising the
         // arguments and calling through -- which is what --external-calls=all
         // asks for -- means calling a function that was never linked in, and
