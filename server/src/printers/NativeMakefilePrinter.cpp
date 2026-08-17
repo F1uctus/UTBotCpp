@@ -573,6 +573,17 @@ namespace printer {
                     if (isExecutable) {
                         linkCommand.addFlagToBegin(transformExeToLib ? SHARED_FLAG : RELOCATE_FLAG);
                     }
+                } else if (Paths::isStaticLibraryFile(recompiledFile)) {
+                    // The members have just been recompiled by the bundled
+                    // compiler, so the bundled archiver indexes them rather
+                    // than whichever "ar" the build database happened to name.
+                    // On Windows nothing answers to a bare "ar" at all except
+                    // the busybox applet, which implements only x/p/t/r and
+                    // rejects the "s" that builds the index.
+                    //
+                    // isArchiveCommand is also true of ld, which is why this
+                    // asks what is being produced rather than what produces it.
+                    linkCommand.useArchiver(Paths::getAr());
                 }
 
                 linkCommand.setBuildTool(getRelativePathForLinker(linkCommand.getBuildTool()));

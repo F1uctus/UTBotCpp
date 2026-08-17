@@ -71,6 +71,21 @@ namespace utbot {
                CollectionUtils::contains(commandLine, "-shared");
     }
 
+    void LinkCommand::useArchiver(fs::path archiver) {
+        setBuildTool(std::move(archiver));
+        // The archive is remembered by value before the -o goes: erase runs
+        // std::remove across the list, which shifts values between nodes
+        // instead of relinking them, so the output iterator would be left
+        // holding the first member rather than the archive.
+        const std::string archive = *output;
+        if (CollectionUtils::erase(commandLine, std::string{ "-o" })) {
+            auto it = std::find(commandLine.begin(), commandLine.end(), archive);
+            if (it != commandLine.end()) {
+                output = it;
+            }
+        }
+    }
+
     void LinkCommand::initOutput() {
         auto it = findOutput();
         if (it != commandLine.end()) {
