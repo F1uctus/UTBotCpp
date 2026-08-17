@@ -179,7 +179,14 @@ void TypesResolver::resolveStructEx(const clang::RecordDecl *D, const std::strin
     structInfo.alignment = getDeclAlignment(D);
     structInfo.subType = subType;
     structInfo.hasDefaultPublicConstructor = false;
-    if (auto CXXD = dynamic_cast<const clang::CXXRecordDecl *>(D)) {
+    // llvm::dyn_cast, not dynamic_cast: Clang is built without RTTI, so the
+    // language's own cast has no type data to consult. On Windows that is not
+    // the quiet no-op it looks like -- the runtime faults with "no RTTI data",
+    // which surfaced as an access violation the moment any struct was
+    // resolved, and so as a generator that died on every project whose
+    // functions take a pointer to a struct. LLVM's own cast is what the rest
+    // of this file uses, including for this very type a few lines above.
+    if (auto CXXD = llvm::dyn_cast<const clang::CXXRecordDecl>(D)) {
         LOG_S(MAX) << "Struct/Class " << structInfo.name << " CXX class";
         if (!CXXD->isCLike()) {
             structInfo.isCLike = false;
