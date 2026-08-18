@@ -79,7 +79,7 @@ namespace CMakeFileApi {
                 if (command.contains("arguments")) {
                     arguments = command.at("arguments").get<std::vector<std::string>>();
                 } else {
-                    arguments = StringUtils::splitByWhitespaces(command.at("command").get<std::string>());
+                    arguments = StringUtils::splitCommandLine(command.at("command").get<std::string>());
                 }
                 for (size_t i = 0; i + 1 < arguments.size(); ++i) {
                     if (arguments[i] == "-o" || arguments[i] == "/Fo") {

@@ -1,6 +1,9 @@
 #include "StringUtils.h"
 #include "PrinterUtils.h"
 
+#include <llvm/Support/CommandLine.h>
+#include <llvm/Support/StringSaver.h>
+
 namespace StringUtils {
     bool isNumber(std::string_view s) {
         return !s.empty() && std::all_of(s.begin(),
@@ -119,6 +122,28 @@ namespace StringUtils {
         std::vector<std::string> ret((std::istream_iterator<std::string>(buffer)),
                                      std::istream_iterator<std::string>());
         return ret;
+    }
+
+    std::vector<std::string> splitCommandLine(std::string_view command) {
+        llvm::BumpPtrAllocator allocator;
+        llvm::StringSaver saver(allocator);
+        llvm::SmallVector<const char *, 64> tokens;
+        // The same choice clang's own compilation-database reader makes when
+        // the file does not say which shell wrote it: the one this platform
+        // has.
+#ifdef _WIN32
+        llvm::cl::TokenizeWindowsCommandLine(llvm::StringRef(command.data(), command.size()),
+                                             saver, tokens);
+#else
+        llvm::cl::TokenizeGNUCommandLine(llvm::StringRef(command.data(), command.size()), saver,
+                                         tokens);
+#endif
+        std::vector<std::string> arguments;
+        arguments.reserve(tokens.size());
+        for (const char *token: tokens) {
+            arguments.emplace_back(token);
+        }
+        return arguments;
     }
 
     void ltrim(std::string &s) {

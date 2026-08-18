@@ -71,6 +71,18 @@ namespace StringUtils {
 
     std::vector<std::string> splitByWhitespaces(std::string_view input);
 
+    /**
+     * Splits a command line into the arguments a shell would have passed.
+     *
+     * A compilation database records a command as one string, escaped for the
+     * shell of the platform that wrote it, so splitting it on whitespace is
+     * not the same thing: it keeps the quotes as characters and cuts a path
+     * that has a space in it in half. Clang's own reader of the same file
+     * tokenises it properly, which is why the AST stage was reading a command
+     * the compile stage could not reproduce.
+     */
+    std::vector<std::string> splitCommandLine(std::string_view command);
+
     void removeLineEndings(std::string &s);
 
     void ltrim(std::string &s);

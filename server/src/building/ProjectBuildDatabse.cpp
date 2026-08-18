@@ -87,7 +87,7 @@ void ProjectBuildDatabase::initObjects(const nlohmann::json &compileCommandsJson
         std::vector<std::string> jsonArguments;
         if (compileCommand.contains("command")) {
             std::string command = compileCommand.at("command");
-            jsonArguments = StringUtils::splitByWhitespaces(command);
+            jsonArguments = StringUtils::splitCommandLine(command);
         } else {
             jsonArguments = std::vector<std::string>(compileCommand.at("arguments"));
         }
@@ -184,7 +184,7 @@ void ProjectBuildDatabase::initInfo(const nlohmann::json &linkCommandsJson, bool
         std::vector<std::string> jsonArguments;
         if (linkCommand.contains("command")) {
             std::string command = linkCommand.at("command");
-            jsonArguments = StringUtils::splitByWhitespaces(command);
+            jsonArguments = StringUtils::splitCommandLine(command);
         } else {
             jsonArguments = std::vector<std::string>(linkCommand.at("arguments"));
         }
