@@ -55,10 +55,13 @@ private:
                                      tests::Tests &tests,
                                      std::vector<tests::MethodKtests> &ktests);
 
+    /// \p entryPointCount is how many entry points the run covers, which is
+    /// what its time budget has to be a multiple of.
     std::pair<std::vector<std::string>, fs::path>
     createKleeParams(const tests::TestMethod &testMethod,
                      const tests::Tests &tests,
-                     const std::string &methodNameOrEmptyForFolder);
+                     const std::string &methodNameOrEmptyForFolder,
+                     size_t entryPointCount = 1);
 
     void addTailKleeInitParams(std::vector<std::string> &argvData,
                                const std::string &bitcodeFilePath);

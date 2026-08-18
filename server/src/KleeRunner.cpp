@@ -281,7 +281,8 @@ static void processMethod(MethodKtests &ktestChunk,
 std::pair<std::vector<std::string>, fs::path>
 KleeRunner::createKleeParams(const tests::TestMethod &testMethod,
                              const tests::Tests &tests,
-                             const std::string &methodNameOrEmptyForFolder) {
+                             const std::string &methodNameOrEmptyForFolder,
+                             size_t entryPointCount) {
     fs::path kleeOut = Paths::kleeOutDirForEntrypoints(projectContext, tests.sourceFilePath,
                                                        methodNameOrEmptyForFolder);
     fs::create_directories(kleeOut.parent_path());
@@ -368,8 +369,17 @@ KleeRunner::createKleeParams(const tests::TestMethod &testMethod,
         // dumps its remaining states and writes their test cases, where one
         // that is killed writes nothing at all. Without this every function
         // that used its whole budget produced an empty result.
-        argvData.emplace_back(
-            "--max-time=" + std::to_string(settingsContext.timeoutPerFunction->count()) + "s");
+        //
+        // The budget is the whole run's, and a run covers every entry point in
+        // the batch, each with --timeout-per-function of its own. Charging the
+        // run one function's worth halts it partway through the first ones and
+        // before the rest have started: on a project whose files hold several
+        // functions each, every file came back empty, while the same functions
+        // asked for one file at a time produced tests.
+        argvData.emplace_back("--max-time=" +
+                              std::to_string(settingsContext.timeoutPerFunction->count() *
+                                             std::max<size_t>(entryPointCount, 1)) +
+                              "s");
         // --max-time is only checked between instructions, so a run that is
         // inside one long solver query sails past it: on a large project about
         // one function in twenty ran until the external kill instead, and those
@@ -510,7 +520,7 @@ void KleeRunner::processBatchWithInteractive(const std::vector<tests::TestMethod
         }
     }
 
-    auto [argvData, kleeOut] = createKleeParams(testMethods[0], tests, "");
+    auto [argvData, kleeOut] = createKleeParams(testMethods[0], tests, "", testMethods.size());
     {
         // additional KLEE arguments
         if (KleeOptions::targetHasUnitTestBotExtensions()) {
