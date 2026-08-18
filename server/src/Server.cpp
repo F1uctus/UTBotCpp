@@ -329,15 +329,11 @@ Status Server::TestsGenServiceImpl::ProcessBaseTestRequest(BaseTestGen &testGen,
                                fetcher.getStructsToDeclare(), testGen.serverBuildDir, typesHandler)
                 .generateTestHeaders(testGen.tests, stubGen, selectedTargets, testGen.progressWriter);
         KleeRunner kleeRunner{testGen.projectContext, testGen.settingsContext};
-        // Interactive mode runs KLEE once over an --entrypoints-file and reads
-        // the per-entry-point directories it leaves behind. Both are the fork's;
-        // an upstream KLEE takes a single --entry-point and writes straight into
-        // the output directory, so those per-method directories never appear and
-        // every method looks as though it produced nothing.
-        //
-        // One run per method costs a process spawn each but is what this KLEE
-        // can actually do, and processBatchWithoutInteractive already does it.
-        bool interactiveMode = KleeOptions::targetHasUnitTestBotExtensions() &&
+        // One run over a file's methods, reading the per-entry-point directories
+        // it leaves behind. A process per method spends the parse, the link and
+        // the preparation passes again for each of them, which on a whole
+        // project is most of the wall clock.
+        bool interactiveMode = KleeOptions::targetHasEntryPointBatching() &&
                                (dynamic_cast<ProjectTestGen *>(&testGen) != nullptr);
         auto generationStartTime = std::chrono::steady_clock::now();
         StatsUtils::TestsGenerationStatsFileMap generationStatsMap(testGen.projectContext,

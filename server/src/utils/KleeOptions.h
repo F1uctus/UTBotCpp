@@ -32,6 +32,10 @@ namespace KleeOptions {
      */
     bool targetHasUnitTestBotExtensions();
 
+    /// Whether one run can cover several entry points, so a file's methods do
+    /// not each pay for the module being prepared again.
+    bool targetHasEntryPointBatching();
+
     /**
      * True if the target KLEE builds the POSIX runtime.
      *

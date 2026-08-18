@@ -513,8 +513,13 @@ void KleeRunner::processBatchWithInteractive(const std::vector<tests::TestMethod
     auto [argvData, kleeOut] = createKleeParams(testMethods[0], tests, "");
     {
         // additional KLEE arguments
-        argvData.emplace_back("--interactive");
-        argvData.emplace_back(KleeUtils::processNumberOption());
+        if (KleeOptions::targetHasUnitTestBotExtensions()) {
+            // The fork kept a process alive and was fed entry points over a
+            // socket. This KLEE reads them all up front instead, so there is
+            // nothing to talk to.
+            argvData.emplace_back("--interactive");
+            argvData.emplace_back(KleeUtils::processNumberOption());
+        }
         {
             // entrypoints
             fs::path entrypoints = kleeOut.parent_path() / "entrypoints.txt";

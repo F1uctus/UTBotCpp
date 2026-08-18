@@ -36,13 +36,12 @@ const std::set<std::string> forkOnlyOptions = {
     "--use-tbaa",
     "--fp-runtime",
     "--use-cov-check",
+    // The fork's interactive server, which kept a process alive to be fed
+    // entry points over a socket. What that was for -- not reloading the module
+    // per method -- is covered by --entrypoints-file, which this KLEE now has,
+    // so nothing is lost by dropping these two.
     "--interactive",
     "--process-number",
-    // The fork's own multi-entry-point and per-function timeout mechanism.
-    // Upstream has neither; the timeout is passed as --max-time instead, and
-    // each entry point is a separate run.
-    "--entrypoints-file",
-    "--timeout-per-function",
 };
 
 /**
@@ -96,6 +95,13 @@ bool KleeOptions::targetHasSymbolicFloatingPoint() {
     // toConstant() on both operands unconditionally, and there is no build
     // option that changes it.
     return false;
+}
+
+bool KleeOptions::targetHasEntryPointBatching() {
+    // --entrypoints-file and --timeout-per-function: one run over a file's
+    // methods against a module parsed, linked and prepared once, rather than a
+    // process each. Not the fork's mechanism, but the same effect.
+    return true;
 }
 
 bool KleeOptions::targetHasUnitTestBotExtensions() {
