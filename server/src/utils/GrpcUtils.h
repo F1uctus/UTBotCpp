@@ -33,7 +33,8 @@ namespace GrpcUtils {
                           ErrorMode errorMode,
                           bool differentVariablesOfTheSameType,
                           bool skipObjectWithoutSource,
-                          bool instrumentUndefinedBehaviour);
+                          bool instrumentUndefinedBehaviour,
+                          testsgen::TestLanguage testLanguage = testsgen::TEST_LANGUAGE_CXX);
 
     std::unique_ptr<testsgen::SnippetRequest>
     createSnippetRequest(std::unique_ptr<testsgen::ProjectContext> projectContext,

@@ -109,6 +109,8 @@ private:
 
     std::string decorate(std::string_view name) const;
 
+    std::string externC() const;
+
     void replaceAnonymousEnumTypeName(std::string &strDecl,
                                       const std::string &typeName) const;
 

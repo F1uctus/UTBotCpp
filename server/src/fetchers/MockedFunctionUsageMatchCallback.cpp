@@ -83,7 +83,7 @@ void MockedFunctionUsageMatchCallback::run(const MatchFinder::MatchResult &Resul
         QualType parameterQualType = parameter->getType();
         functionInfo->params.push_back(
             {ParamsHandler::getType(parameterQualType, parameterQualType, sourceManager),
-             NameDecorator::decorate(parameter->getNameAsString())});
+             NameDecorator::decorateForTests(parameter->getNameAsString())});
     }
 
     tests::Tests &tests = (*parent->projectTests).at(sourceFilePath);

@@ -84,7 +84,7 @@ void FunctionDeclsMatchCallback::run(const MatchFinder::MatchResult &Result) {
             typesResolver.resolve(realReturnType);
         }
         auto returnVarName =
-                NameDecorator::decorate(PrinterUtils::getReturnMangledName(methodName));
+                NameDecorator::decorateForTests(PrinterUtils::getReturnMangledName(methodName));
         const QualType pType = realReturnType->getPointeeType();
         if (pType.getTypePtrOrNull()) {
             addFunctionPointer(methodDescription.functionPointers,
@@ -108,7 +108,7 @@ void FunctionDeclsMatchCallback::run(const MatchFinder::MatchResult &Result) {
         for (size_t i = 0; i < paramsFromDeclaration.size(); ++i) {
             const auto &declParam = paramsFromDeclaration[i];
             const auto &defParam = paramsFromDefinition[i];
-            std::string name = NameDecorator::decorate(defParam->getNameAsString());
+            std::string name = NameDecorator::decorateForTests(defParam->getNameAsString());
             std::string mangledName = PrinterUtils::getParamMangledName(name, methodName);
             if (name.empty()) {
                 return;

@@ -157,6 +157,17 @@ namespace printer {
         declareAction(stringFormat("$(shell mkdir -p %s >/dev/null)",
                                    getRelativePath(dependencyDirectory)));
 
+        // A C test brings its own runner, so gtest is built only if some test
+        // in this makefile is still C++. Building it anyway would need a C++
+        // compiler on a machine whose only reason to have one was gtest.
+        const bool anyCxxTest =
+            std::any_of(testGen->tests.begin(), testGen->tests.end(), [](const auto &entry) {
+                return !Paths::generateCTestsFor(entry.first);
+            });
+        if (!anyCxxTest) {
+            return;
+        }
+
         comment("{ gtest");
 
         fs::path gtestBuildDirectory = getRelativePath(buildDirectory / "googletest");
@@ -313,15 +324,23 @@ namespace printer {
     }
 
     void NativeMakefilePrinter::addTestTarget(const fs::path &sourcePath) {
+        // A C test is compiled and linked by the same tools as the project it
+        // tests. The C++ compiler was only ever here for gtest.
+        const bool testIsC = Paths::generateCTestsFor(sourcePath);
+        const fs::path testCompiler = testIsC ? primaryCompiler : primaryCxxCompiler;
+        const fs::path testLinker = testIsC ? primaryCompiler : cxxLinker;
+
         auto compilationUnitInfo = testGen->getClientCompilationUnitInfo(sourcePath);
         auto testCompilationCommand = compilationUnitInfo->command;
-        testCompilationCommand.setBuildTool(getRelativePathForLinker(primaryCxxCompiler));
+        testCompilationCommand.setBuildTool(getRelativePathForLinker(testCompiler));
         testCompilationCommand.setOptimizationLevel(OPTIMIZATION_FLAG);
         testCompilationCommand.removeCompilerFlagsAndOptions(
             UNSUPPORTED_FLAGS_AND_OPTIONS_TEST_MAKE);
         testCompilationCommand.removeIncludeFlags();
-        const fs::path gtestLib = Paths::getGtestLibPath();
-        testCompilationCommand.addFlagToBegin(CompilationUtils::getIncludePath(getRelativePath(gtestLib / "googletest" / "include")));
+        if (!testIsC) {
+            const fs::path gtestLib = Paths::getGtestLibPath();
+            testCompilationCommand.addFlagToBegin(CompilationUtils::getIncludePath(getRelativePath(gtestLib / "googletest" / "include")));
+        }
         if (Paths::isCXXFile(sourcePath)) {
             testCompilationCommand.addFlagToBegin(CompilationUtils::getIncludePath(getRelativePath(Paths::getAccessPrivateLibPath())));
         }
@@ -353,11 +372,15 @@ namespace printer {
         auto rootLinkUnitInfo = testGen->getTargetBuildDatabase()->getClientLinkUnitInfo(rootPath);
         fs::path testExecutablePath = getTestExecutablePath(sourcePath);
 
-        std::vector<std::string> filesToLink{ "$(GTEST_MAIN)", "$(GTEST_ALL)", testCompilationCommand.getOutput(),
-                                             getRelativePath(
-                                                     sharedOutput.value()) };
+        std::vector<std::string> filesToLink;
+        if (!testIsC) {
+            filesToLink.push_back("$(GTEST_MAIN)");
+            filesToLink.push_back("$(GTEST_ALL)");
+        }
+        filesToLink.push_back(testCompilationCommand.getOutput());
+        filesToLink.push_back(getRelativePath(sharedOutput.value()));
         if (rootLinkUnitInfo->commands.front().isArchiveCommand()) {
-            std::vector<std::string> dynamicLinkCommandLine{ getRelativePathForLinker(cxxLinker), "$(LDFLAGS)",
+            std::vector<std::string> dynamicLinkCommandLine{ getRelativePathForLinker(testLinker), "$(LDFLAGS)",
                                                             bits32Flag,
                                                             pthreadFlag, coverageLinkFlags,
                                                             sanitizerLinkFlags, "-o",
@@ -372,7 +395,7 @@ namespace printer {
                           { dynamicLinkCommand.toStringWithChangingDirectory() });
         } else {
             utbot::LinkCommand dynamicLinkCommand = rootLinkUnitInfo->commands.front();
-            dynamicLinkCommand.setBuildTool(cxxLinker);
+            dynamicLinkCommand.setBuildTool(testLinker);
             dynamicLinkCommand.setOutput(testExecutablePath);
             dynamicLinkCommand.erase_if([&](std::string const &argument) {
                 return CollectionUtils::contains(rootLinkUnitInfo->files, argument) ||
@@ -406,7 +429,7 @@ namespace printer {
                             sharedOutput.value().parent_path())));
             dynamicLinkCommand.addFlagToBegin("$(LDFLAGS)");
 
-            dynamicLinkCommand.setBuildTool(getRelativePathForLinker(cxxLinker));
+            dynamicLinkCommand.setBuildTool(getRelativePathForLinker(testLinker));
             dynamicLinkCommand.setOutput(
                     getRelativePath(testExecutablePath));
 

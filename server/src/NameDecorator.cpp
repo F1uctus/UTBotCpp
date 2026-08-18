@@ -1,9 +1,14 @@
 #include "NameDecorator.h"
 
+#include "Language.h"
 #include "utils/CollectionUtils.h"
 #include "utils/StringUtils.h"
 
 #include <iterator>
+
+std::string NameDecorator::decorateForTests(std::string_view name) {
+    return utbot::TestLanguage::isC() ? std::string(name) : decorate(name);
+}
 
 std::string NameDecorator::decorate(std::string_view name) {
     std::string result;

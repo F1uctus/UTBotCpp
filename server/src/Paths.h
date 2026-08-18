@@ -294,6 +294,21 @@ namespace Paths {
 
     utbot::Language getSourceLanguage(const fs::path &path);
 
+    /**
+     * Whether tests for \p source are generated as C.
+     *
+     * The request's choice only reaches sources C can drive. A C++ source has
+     * overloads, references and constructors that a C test has no way to name,
+     * so one keeps its gtest tests even when the rest of the project does not.
+     */
+    bool generateCTestsFor(const fs::path &source);
+
+    /// The extension a generated test file for \p source is written with.
+    std::string testFileExtension(const fs::path &source);
+
+    /// Whether \p path looks like a file a generated test lives in.
+    bool isGeneratedTestSource(const fs::path &path);
+
     // Both spellings, on both platforms. What a build artifact is called is
     // decided by the toolchain that produced it, not by the machine reading
     // the build database: a project configured by CMake against the MSVC ABI

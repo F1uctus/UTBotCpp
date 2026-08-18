@@ -414,6 +414,15 @@ Commands::SettingsContextOptionGroup::SettingsContextOptionGroup(CLI::App *comma
     settingsContextOptions->add_flag("--no-stubs", noStubs,
                                      "True, if you don't want UTBot to use generated stubs from "
                                      "<testsDir>/stubs folder instead real files.");
+    settingsContextOptions
+            ->add_option("--test-language", testLanguage,
+                         "Language the generated tests are written in. \"c++\" produces gtest "
+                         "sources, as before. \"c\" produces tests that bring their own runner "
+                         "and a main(), so they need nothing but a C compiler -- which is what "
+                         "lets them be cross-compiled for a target board.")
+            ->type_name(" ENUM:value in {" +
+                        StringUtils::joinWith(CollectionUtils::getKeys(testLanguageMap), "|") + "}")
+            ->transform(CLI::CheckedTransformer(testLanguageMap, CLI::ignore_case));
 }
 
 CLI::Option_group *Commands::SettingsContextOptionGroup::getSettingsCommandsContext() const {
@@ -458,6 +467,18 @@ bool Commands::SettingsContextOptionGroup::getSkipObjectWithoutSource() const {
 
 bool Commands::SettingsContextOptionGroup::doInstrumentUndefinedBehaviour() const {
     return !noUbsan;
+}
+
+const std::map<std::string, testsgen::TestLanguage>
+        Commands::SettingsContextOptionGroup::testLanguageMap = {
+                { "c++", testsgen::TEST_LANGUAGE_CXX },
+                { "cpp", testsgen::TEST_LANGUAGE_CXX },
+                { "cxx", testsgen::TEST_LANGUAGE_CXX },
+                { "c", testsgen::TEST_LANGUAGE_C },
+        };
+
+testsgen::TestLanguage Commands::SettingsContextOptionGroup::getTestLanguage() const {
+    return testLanguage;
 }
 
 Commands::RunTestsCommands::RunTestsCommands(Commands::MainCommands &commands) {

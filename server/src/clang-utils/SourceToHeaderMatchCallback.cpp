@@ -148,7 +148,7 @@ void SourceToHeaderMatchCallback::handleTypedef(const TypedefDecl *decl) {
     auto canonicalType = decl->getUnderlyingType().getCanonicalType();
     auto name = decl->getName().str();
     auto canonicalName = canonicalType.getAsString();
-    if (name == "wchar_t" && !forStubHeader) {
+    if (name == "wchar_t" && !forStubHeader && !Paths::generateCTestsFor(sourceFilePath)) {
         // wchar_t is builtin type in C++ but is typedef in C, so let's define it
         if (externalStream != nullptr) {
             *externalStream << NameDecorator::defineWcharT(canonicalName) << "\n";
@@ -245,13 +245,24 @@ void SourceToHeaderMatchCallback::generateInternal(const FunctionDecl *decl) con
     }
 
     if (externFromStub) {
-        *internalStream << "extern \"C\" " << curDecl << ";\n";
+        *internalStream << externC() << curDecl << ";\n";
     } else {
-        *internalStream << "extern \"C\" " << wrapperDecl << ";\n";
+        *internalStream << externC() << wrapperDecl << ";\n";
         *internalStream << "static " << curDecl << " {\n";
         printReturn(decl, wrapperName, internalStream);
         *internalStream << "}\n";
     }
+}
+
+/**
+ * The linkage specifier that gets a C symbol from the language the test is
+ * written in.
+ *
+ * A C test is already reading C declarations, and "extern \"C\"" is not
+ * something a C compiler accepts, so there it is simply "extern".
+ */
+std::string SourceToHeaderMatchCallback::externC() const {
+    return Paths::generateCTestsFor(sourceFilePath) ? "extern " : "extern \"C\" ";
 }
 
 void SourceToHeaderMatchCallback::generateInternal(const VarDecl *decl) const {
@@ -283,8 +294,16 @@ void SourceToHeaderMatchCallback::generateInternal(const VarDecl *decl) const {
     std::string returnTypeName = PrinterUtils::getPointerMangledName(name);
     std::string getterName = PrinterUtils::getterName(wrapperName);
     *internalStream << generateTypedefForGetterReturnType(decl, policy, returnTypeName);
-    *internalStream << "extern \"C\" " << PrinterUtils::getterDecl(returnTypeName, wrapperName) << ";\n";
-    *internalStream << stringFormat("%s = *%s();\n", refDecl, getterName);
+    *internalStream << externC() << PrinterUtils::getterDecl(returnTypeName, wrapperName) << ";\n";
+    if (Paths::generateCTestsFor(sourceFilePath)) {
+        // "int (&x) = *get();" is a reference bound at load time, which C has
+        // no equivalent of. A macro reaches the same variable by the same name
+        // and costs a call per use, which for a handful of globals in a test is
+        // nothing.
+        *internalStream << stringFormat("#define %s (*%s())\n", decoratedName, getterName);
+    } else {
+        *internalStream << stringFormat("%s = *%s();\n", refDecl, getterName);
+    }
 }
 
 void SourceToHeaderMatchCallback::generateWrapper(const FunctionDecl *decl) const {
@@ -391,15 +410,26 @@ void SourceToHeaderMatchCallback::printReturn(const FunctionDecl *decl,
 void SourceToHeaderMatchCallback::printUnnamedTypeDecl(const std::string &structName,
                                                 const std::string &fieldName,
                                                 const std::string &typeName) const {
-    std::string typeDecl = StringUtils::stringFormat(
-        "typedef decltype(%s::%s) %s;\n",
-        structName, fieldName, typeName
-    );
+    // decltype is C++; __typeof__ is what clang and gcc offer C for the same
+    // question, and it takes an expression, so the field is reached through a
+    // null pointer that is never loaded from.
+    std::string typeDecl =
+        Paths::generateCTestsFor(sourceFilePath)
+            ? StringUtils::stringFormat("typedef __typeof__(((%s *) 0)->%s) %s;\n", structName,
+                                        fieldName, typeName)
+            : StringUtils::stringFormat("typedef decltype(%s::%s) %s;\n", structName, fieldName,
+                                        typeName);
     *unnamedTypeDeclsStream << typeDecl;
 }
 
 std::string SourceToHeaderMatchCallback::decorate(std::string_view name) const {
-    return forStubHeader ? std::string(name) : NameDecorator::decorate(name);
+    // Decoration renames identifiers that are keywords in C++ but not in C,
+    // and is undone by the macros the C++ header carries. A C header carries
+    // no such macros, and needs none: the names were legal C to begin with.
+    if (forStubHeader || Paths::generateCTestsFor(sourceFilePath)) {
+        return std::string(name);
+    }
+    return NameDecorator::decorate(name);
 }
 
 const std::string GNUPREREQ = "!__GNUC_PREREQ (7, 0) || defined __cplusplus";
@@ -454,7 +484,11 @@ SourceToHeaderMatchCallback::getDefaultPrintingPolicy(const Decl *decl,
     if (forStubHeader) {
         return policy;
     }
-    if (adjustForCPlusPlus) {
+    // The adjustment exists to make a C declaration readable as C++: it drops
+    // the struct/enum keyword before a tag name and spells _Bool as bool. A C
+    // reader wants neither -- a bare tag name is not a type there, and bool is
+    // not a keyword without <stdbool.h>.
+    if (adjustForCPlusPlus && !Paths::generateCTestsFor(sourceFilePath)) {
         policy.adjustForCPlusPlus();
         policy.Restrict = 0;
         policy.Alignof = 1;

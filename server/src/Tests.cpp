@@ -121,7 +121,7 @@ std::shared_ptr<EnumValueView> KTestObjectParser::enumView(const std::vector<cha
     std::string value = readBytesAsValue<int>(byteArray, offsetInBits, lenInBits);
     if (CollectionUtils::containsKey(enumInfo.valuesToEntries, value)) {
         auto name = enumInfo.getEntryName(value, utbot::Language::CXX);
-        value = NameDecorator::decorate(name);
+        value = NameDecorator::decorateForTests(name);
     } else {
         LOG_S(WARNING) << "Enum value for '" << enumInfo.name << "' is out of range: " << value;
         std::string format = enumInfo.isSpecifierNeeded ? "(enum %s)(%d)" : "(%s) %d";

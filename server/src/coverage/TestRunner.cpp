@@ -101,7 +101,7 @@ std::vector<UnitTest> TestRunner::getTestsToLaunch() {
                             return;
                         }
                         const auto &testFilePath = directoryEntry.path();
-                        if (testFilePath.extension() == Paths::CXX_EXTENSION &&
+                        if (Paths::isGeneratedTestSource(testFilePath) &&
                             StringUtils::endsWith(testFilePath.stem().string(), Paths::TEST_SUFFIX)) {
                             fs::path sourcePath = Paths::testPathToSourcePath(projectContext, testFilePath);
                             fs::path makefile =

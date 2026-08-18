@@ -11,6 +11,11 @@ namespace PrinterUtils {
         return StringUtils::stringFormat("from_bytes<%s>", typeName);
     }
     std::string convertBytesToStruct(const std::string &typeName, const std::string &bytes) {
+        // C has no function template to take the type as a parameter, so the
+        // C runner spells the same thing as a macro; see UTBOT_FROM_BYTES.
+        if (utbot::TestLanguage::isC()) {
+            return StringUtils::stringFormat("UTBOT_FROM_BYTES(%s, %s)", typeName, bytes);
+        }
         return StringUtils::stringFormat("%s(%s)", convertToBytesFunctionName(typeName), bytes);
     }
 

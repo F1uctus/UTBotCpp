@@ -93,6 +93,29 @@ std::string SourceToHeaderRewriter::generateTestHeader(const fs::path &sourceFil
                                          sourceFileToInclude, sourceDeclarations.unnamedTypeDeclarations);
     }
 
+    if (utbot::TestLanguage::isC()) {
+        // None of the scaffolding above is about C: the namespace exists to
+        // keep the project's names away from gtest's, the keyword macros exist
+        // because C code was being read by a C++ compiler, and the wchar_t
+        // define exists because C++ has it as a keyword and C does not. A C
+        // test reads C declarations, so they are simply the declarations.
+        //
+        // _Alignas survives: clang prints an alignment attribute after the
+        // member it belongs to, which no dialect accepts, and defining it away
+        // is what makes such a struct printable at all.
+        return StringUtils::stringFormat("%s\n"
+                                         "#define _Alignas(x)\n"
+                                         "%s\n"
+                                         "%s\n"
+                                         "%s\n"
+                                         "\n%s",
+                                         Copyright::GENERATED_C_CPP_FILE_HEADER,
+                                         PrinterUtils::KNOWN_IMPLICIT_RECORD_DECLS_CODE,
+                                         sourceDeclarations.externalDeclarations,
+                                         sourceDeclarations.internalDeclarations,
+                                         sourceDeclarations.unnamedTypeDeclarations);
+    }
+
     return StringUtils::stringFormat(
         "%s\n"
         "namespace %s {\n"

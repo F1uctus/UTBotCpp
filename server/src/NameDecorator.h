@@ -10,6 +10,19 @@ class NameDecorator {
 public:
     static std::string decorate(std::string_view name);
 
+    /**
+     * decorate, unless the generated tests are C.
+     *
+     * Renaming a name that is a keyword in C++ but not in C only works because
+     * the C++ generated header defines the original spelling back; a C test
+     * carries no such macros and needs none, since the name was legal C where
+     * it came from.
+     *
+     * Kept separate from decorate so that the DEFINES below, which are built
+     * from it before any request exists, stay what they always were.
+     */
+    static std::string decorateForTests(std::string_view name);
+
     static std::string defineWcharT(std::string_view canonicalName);
 
     static const std::string UNDEF_WCHAR_T;

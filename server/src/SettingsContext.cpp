@@ -12,7 +12,8 @@ namespace utbot {
                                      testsgen::ErrorMode errorMode,
                                      bool differentVariablesOfTheSameType,
                                      bool skipObjectWithoutSource,
-                                     bool instrumentUndefinedBehaviour)
+                                     bool instrumentUndefinedBehaviour,
+                                     Language testLanguage)
             : generateForStaticFunctions(generateForStaticFunctions),
               verbose(verbose),
               timeoutPerFunction(timeoutPerFunction > 0
@@ -25,7 +26,11 @@ namespace utbot {
               errorMode(errorMode),
               differentVariablesOfTheSameType(differentVariablesOfTheSameType),
               skipObjectWithoutSource(skipObjectWithoutSource),
-              instrumentUndefinedBehaviour(instrumentUndefinedBehaviour) {
+              instrumentUndefinedBehaviour(instrumentUndefinedBehaviour),
+              testLanguage(testLanguage) {
+        // Everything downstream of here reads the choice from one place; see
+        // the field's documentation for why it cannot simply be passed along.
+        TestLanguage::set(testLanguage);
     }
 
     SettingsContext::SettingsContext(const testsgen::SettingsContext &settingsContext)
@@ -38,6 +43,9 @@ namespace utbot {
                           settingsContext.errormode(),
                           settingsContext.differentvariablesofthesametype(),
                           settingsContext.skipobjectwithoutsource(),
-                          settingsContext.instrumentundefinedbehaviour()) {
+                          settingsContext.instrumentundefinedbehaviour(),
+                          settingsContext.testlanguage() == testsgen::TEST_LANGUAGE_C
+                              ? Language::C
+                              : Language::CXX) {
     }
 }

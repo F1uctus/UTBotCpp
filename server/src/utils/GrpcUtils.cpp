@@ -43,7 +43,8 @@ namespace GrpcUtils {
                           ErrorMode errorMode,
                           bool differentVariablesOfTheSameType,
                           bool skipObjectWithoutSource,
-                          bool instrumentUndefinedBehaviour) {
+                          bool instrumentUndefinedBehaviour,
+                          testsgen::TestLanguage testLanguage) {
         auto result = std::make_unique<testsgen::SettingsContext>();
         result->set_generateforstaticfunctions(generateForStaticFunctions);
         result->set_verbose(verbose);
@@ -55,6 +56,7 @@ namespace GrpcUtils {
         result->set_differentvariablesofthesametype(differentVariablesOfTheSameType);
         result->set_skipobjectwithoutsource(skipObjectWithoutSource);
         result->set_instrumentundefinedbehaviour(instrumentUndefinedBehaviour);
+        result->set_testlanguage(testLanguage);
         return result;
     }
 

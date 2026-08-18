@@ -1,6 +1,8 @@
 #ifndef UNITTESTBOT_SETTINGSCONTEXT_H
 #define UNITTESTBOT_SETTINGSCONTEXT_H
 
+#include "Language.h"
+
 #include <chrono>
 #include <optional>
 #include <protobuf/testgen.grpc.pb.h>
@@ -23,7 +25,8 @@ namespace utbot {
                         testsgen::ErrorMode errorMode,
                         bool differentVariablesOfTheSameType,
                         bool skipObjectWithoutSource,
-                        bool instrumentUndefinedBehaviour);
+                        bool instrumentUndefinedBehaviour,
+                        Language testLanguage);
 
         const bool generateForStaticFunctions;
         const bool verbose;
@@ -43,6 +46,15 @@ namespace utbot {
          * cost is paid again per method.
          */
         const bool instrumentUndefinedBehaviour;
+        /**
+         * The language the generated tests are written in.
+         *
+         * Setting it also publishes it through utbot::TestLanguage, because
+         * the pieces that have to agree -- the path a test file is written to,
+         * the declarations its header carries, the makefile that builds it --
+         * are reached from places that never see a SettingsContext.
+         */
+        const Language testLanguage;
     };
 }
 

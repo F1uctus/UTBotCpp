@@ -379,7 +379,7 @@ void KleeGenerator::parseKTestsToFinalCode(
         testsPrinter.genCode(methodDescription, predicate, verbose, errorMode);
     }
 
-    printer::HeaderPrinter(Paths::getSourceLanguage(tests.sourceFilePath))
+    printer::HeaderPrinter(tests.sourceFilePath)
             .print(tests.testHeaderFilePath, tests.sourceFilePath, tests.headerCode);
     testsPrinter.joinToFinalCode(tests, tests.testHeaderFilePath);
     LOG_S(DEBUG) << "Generated code for " << tests.methods.size() << " tests";

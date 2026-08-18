@@ -1,6 +1,7 @@
 #ifndef UNITTESTBOT_TESTSPRINTER_H
 #define UNITTESTBOT_TESTSPRINTER_H
 
+#include "CTestRunner.h"
 #include "Printer.h"
 #include "Tests.h"
 #include "building/BuildDatabase.h"
@@ -168,7 +169,14 @@ namespace printer {
                                 int &testNum,
                                 ErrorMode errorMode);
 
-        std::uint32_t printSuiteAndReturnMethodsCount(const std::string &suiteName, const Tests::MethodsMap &methods);
+        /// Prints one suite. \p printedTests, when given, collects what was
+        /// printed, which is what the C runner's table has to name.
+        std::uint32_t
+        printSuiteAndReturnMethodsCount(const std::string &suiteName,
+                                        const Tests::MethodsMap &methods,
+                                        std::vector<CTestRunner::TestEntry> *printedTests = nullptr);
+
+        std::string strFail(const std::string &message);
 
         void printFailAssertion(ErrorMode errorMode);
     };

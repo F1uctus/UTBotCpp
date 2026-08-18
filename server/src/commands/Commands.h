@@ -286,6 +286,8 @@ namespace Commands {
 
         [[nodiscard]] bool doInstrumentUndefinedBehaviour() const;
 
+        [[nodiscard]] testsgen::TestLanguage getTestLanguage() const;
+
     private:
         CLI::Option_group *settingsContextOptions;
         bool generateForStaticFunctions = true;
@@ -298,6 +300,8 @@ namespace Commands {
         bool differentVariablesOfTheSameType = false;
         bool skipObjectWithoutSource = false;
         bool noUbsan = false;
+        testsgen::TestLanguage testLanguage = testsgen::TEST_LANGUAGE_CXX;
+        static const std::map<std::string, testsgen::TestLanguage> testLanguageMap;
     };
 };
 

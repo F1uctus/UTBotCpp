@@ -49,6 +49,25 @@ namespace PrinterUtils {
                                     "    fclose(out);\n"
                                     "}\n";
 
+    /// The same, for a C test: static so an unused copy is not a link error,
+    /// and empty where the runner was built without stdio.
+    const std::string writeToFileC =
+        "static void write_to_file(const char *fileName, const char *buf) {\n"
+        "#ifdef UTBOT_TEST_NO_STDIO\n"
+        "    (void) fileName;\n"
+        "    (void) buf;\n"
+        "#else\n"
+        "    FILE *out = fopen(fileName, \"w\");\n"
+        "    if (out == NULL) {\n"
+        "        return;\n"
+        "    }\n"
+        "    fwrite(buf, 1, " +
+        std::to_string(types::Type::symInputSize) +
+        ", out);\n"
+        "    fclose(out);\n"
+        "#endif\n"
+        "}\n";
+
     const std::string DEFAULT_ACCESS = "%s";
     const std::string KLEE_PREFER_CEX = "klee_prefer_cex";
     const std::string KLEE_ASSUME = "klee_assume";

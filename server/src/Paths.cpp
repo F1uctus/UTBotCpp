@@ -363,8 +363,29 @@ namespace Paths {
                sourcePathToTestName(sourceFilePath);
     }
 
+    bool generateCTestsFor(const fs::path &source) {
+        return utbot::TestLanguage::isC() && !isCXXFile(source);
+    }
+
+    std::string testFileExtension(const fs::path &source) {
+        // A C test compiled as C++ would still build, but the point of asking
+        // for C tests is that the only compiler they need is a C one -- and a
+        // cross-compiler for a target board frequently is exactly that.
+        return generateCTestsFor(source) ? ".c" : CXX_EXTENSION;
+    }
+
+    bool isGeneratedTestSource(const fs::path &path) {
+        if (path.extension() == CXX_EXTENSION) {
+            return true;
+        }
+        // Only when they were asked for: a project's own .c files sit next to
+        // nothing here, but a stub or a wrapper does, and calling one of those
+        // a test would have the runner build it as if it had a main().
+        return utbot::TestLanguage::isC() && isCFile(path);
+    }
+
     fs::path sourcePathToTestName(const fs::path &source) {
-        return addSuffix(addOrigExtensionAsSuffixAndAddNew(source, ".cpp"),
+        return addSuffix(addOrigExtensionAsSuffixAndAddNew(source, testFileExtension(source)),
                          TEST_SUFFIX).filename();
     }
 

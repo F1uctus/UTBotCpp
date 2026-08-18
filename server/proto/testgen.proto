@@ -99,6 +99,17 @@ enum ErrorMode {
     PASSING = 2;
 }
 
+// The language the generated tests are written in.
+//
+// This is independent of the language of the code under test: C sources have
+// always been tested from C++, because gtest is C++. TEST_LANGUAGE_C asks for
+// tests that are C instead, which brings their own runner with them and so
+// depend on nothing but a C compiler.
+enum TestLanguage {
+    TEST_LANGUAGE_CXX = 0;
+    TEST_LANGUAGE_C = 1;
+}
+
 message SettingsContext {
     bool generateForStaticFunctions = 1;
     bool verbose = 2;
@@ -111,6 +122,7 @@ message SettingsContext {
     bool skipObjectWithoutSource = 9;
     // Whether the bitcode given to KLEE carries UBSan instrumentation.
     bool instrumentUndefinedBehaviour = 10;
+    TestLanguage testLanguage = 11;
 }
 
 message SnippetRequest {

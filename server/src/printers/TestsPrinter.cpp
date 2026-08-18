@@ -60,12 +60,15 @@ bool TestsPrinter::needsMathHeader(const Tests &tests) {
 }
 
 void TestsPrinter::joinToFinalCode(Tests &tests, const fs::path& generatedHeaderPath) {
+    const bool forC = getLanguage() == utbot::Language::C;
     resetStream();
     writeCopyrightHeader();
     genHeaders(tests, generatedHeaderPath);
     ss << printer::NL;
 
-    ss << "namespace " << PrinterUtils::TEST_NAMESPACE << " {\n";
+    if (!forC) {
+        ss << "namespace " << PrinterUtils::TEST_NAMESPACE << " {\n";
+    }
 
     // Inside the namespace, not before it. The generated header puts the
     // project's types in this namespace, so a global-scope declaration cannot
@@ -78,6 +81,9 @@ void TestsPrinter::joinToFinalCode(Tests &tests, const fs::path& generatedHeader
     //
     // extern "C" keeps C linkage inside a namespace; only the name used to look
     // it up changes, and every test body here is in this namespace too.
+    //
+    // A C test has no namespace to be inside; the declarations are simply at
+    // file scope, where the header's own declarations already are.
     strDeclareSetOfExternVars(tests.externVariables);
 
     for (const auto &commentBlock : tests.commentBlocks) {
@@ -88,9 +94,19 @@ void TestsPrinter::joinToFinalCode(Tests &tests, const fs::path& generatedHeader
     writeStubsForParameters(tests);
     ss << printer::NL;
 
-    tests.regressionMethodsNumber = printSuiteAndReturnMethodsCount(Tests::DEFAULT_SUITE_NAME, tests.methods);
-    tests.errorMethodsNumber = printSuiteAndReturnMethodsCount(Tests::ERROR_SUITE_NAME, tests.methods);
-    ss << RB();
+    std::vector<CTestRunner::TestEntry> printedTests;
+    std::vector<CTestRunner::TestEntry> *collect = forC ? &printedTests : nullptr;
+    tests.regressionMethodsNumber =
+        printSuiteAndReturnMethodsCount(Tests::DEFAULT_SUITE_NAME, tests.methods, collect);
+    tests.errorMethodsNumber =
+        printSuiteAndReturnMethodsCount(Tests::ERROR_SUITE_NAME, tests.methods, collect);
+    if (forC) {
+        // The tests are plain functions, so something has to call them; this is
+        // what gtest_main would have been.
+        ss << CTestRunner::entryPoint(printedTests);
+    } else {
+        ss << RB();
+    }
     printFinalCodeAndAlterJson(tests);
 }
 
@@ -152,7 +168,9 @@ void TestsPrinter::printFinalCodeAndAlterJson(Tests &tests) {
 }
 
 std::uint32_t
-TestsPrinter::printSuiteAndReturnMethodsCount(const std::string &suiteName, const Tests::MethodsMap &methods) {
+TestsPrinter::printSuiteAndReturnMethodsCount(const std::string &suiteName,
+                                              const Tests::MethodsMap &methods,
+                                              std::vector<CTestRunner::TestEntry> *printedTests) {
     if (std::all_of(methods.begin(), methods.end(), [&suiteName](const auto &method) {
         return method.second.codeText.at(suiteName).empty();
     })) {
@@ -165,6 +183,15 @@ TestsPrinter::printSuiteAndReturnMethodsCount(const std::string &suiteName, cons
             continue;
         }
         count += methodDescription.suiteTestCases.at(suiteName).size();
+        if (printedTests != nullptr) {
+            // Collected here rather than where the names are made, so that the
+            // table names exactly the functions this loop just printed.
+            for (int testCaseIndex: methodDescription.suiteTestCases.at(suiteName)) {
+                const Tests::MethodTestCase &testCase =
+                    methodDescription.testCases[testCaseIndex];
+                printedTests->push_back({testCase.suiteName, testCase.testName});
+            }
+        }
         ss << methodDescription.codeText.at(suiteName);
     }
     ss << "#pragma endregion" << printer::NL;
@@ -324,9 +351,13 @@ void TestsPrinter::openFiles(const Tests::MethodDescription &methodDescription,
         std::string strFileName(1, fileName);
         std::string fileMode =
             testCase.getFileByName(fileName).writeBytes > 0 ? "\"w\"" : "\"r\"";
+        // The C++ test looks the type up inside the namespace the generated
+        // header put it in; a C test has only the one scope.
+        std::string fileCast = getLanguage() == utbot::Language::C ? "(FILE *) fopen"
+                                                                  : "(UTBot::FILE *) fopen";
         strDeclareVar(param.type.typeName(), param.name,
                       constrFunctionCall(
-                          "(UTBot::FILE *) fopen",
+                          fileCast,
                           { StringUtils::wrapQuotations(pathToTestDir / strFileName), fileMode },
                           "", std::nullopt, false));
         fileName++;
@@ -411,7 +442,9 @@ void TestsPrinter::genParametrizedTestCase(const Tests::MethodDescription &metho
 void TestsPrinter::genHeaders(Tests &tests, const fs::path& generatedHeaderPath) {
     strInclude(generatedHeaderPath.filename()) << printer::NL;
 
-    strInclude("gtest/gtest.h");
+    if (getLanguage() != utbot::Language::C) {
+        strInclude("gtest/gtest.h");
+    }
 
     if (needsMathHeader(tests)) {
         LOG_S(INFO) << "Added extra \"math.h\" include to file " << tests.testFilename;
@@ -456,7 +489,7 @@ void TestsPrinter::redirectStdin(const Tests::MethodDescription &methodDescripti
         .visit(types::Type::intType(), utbotRedirectStdinStatus, &view, std::nullopt);
     strFunctionCall("utbot_redirect_stdin", { types::Type::getStdinParamName(), utbotRedirectStdinStatus });
     strIfBound("utbot_redirect_stdin_status != 0") << LB();
-    ss << LINE_INDENT() << "FAIL() << \"Unable to redirect stdin.\"" << SCNL;
+    ss << LINE_INDENT() << strFail("Unable to redirect stdin.") << SCNL;
     ss << RB();
 }
 
@@ -862,14 +895,25 @@ void printer::TestsPrinter::parametrizedInitializeSymbolicStubs(const Tests::Met
     }
 }
 
+/**
+ * Reports \p message as a failure, in whichever language the test is written.
+ *
+ * gtest's FAIL() is the head of a stream expression, so the message follows it
+ * with <<. A C macro cannot take a stream, so there the message is an argument.
+ */
+std::string TestsPrinter::strFail(const std::string &message) {
+    const std::string quoted = StringUtils::wrapQuotations(message);
+    return getLanguage() == utbot::Language::C ? "UTBOT_FAIL(" + quoted + ")"
+                                               : "FAIL() << " + quoted;
+}
+
 void TestsPrinter::printFailAssertion(ErrorMode errorMode) {
     switch (errorMode) {
         case ErrorMode::FAILING:
             ss << printer::NL;
             ss << LINE_INDENT()
-               << "FAIL() << \"Unreachable point or the function was supposed to fail, but \"\n"
-               << LINE_INDENT() << LINE_INDENT()
-               << "\"actually completed successfully. See the SARIF report for details.\"";
+               << strFail("Unreachable point or the function was supposed to fail, but "
+                          "actually completed successfully. See the SARIF report for details.");
             ss << SCNL;
             break;
         case ErrorMode::PASSING_IN_TARGET_ONLY:
@@ -930,5 +974,11 @@ Tests::MethodParam printer::TestsPrinter::getValueParam(const Tests::MethodParam
 }
 
 utbot::Language printer::TestsPrinter::getLanguage() const {
+    // A C++ source cannot be driven from C -- overloads, references and
+    // constructors have no spelling there -- so the request's choice reaches
+    // only the sources it was made for.
+    if (utbot::TestLanguage::isC() && srcLanguage != utbot::Language::CXX) {
+        return utbot::Language::C;
+    }
     return utbot::Language::CXX;
 }

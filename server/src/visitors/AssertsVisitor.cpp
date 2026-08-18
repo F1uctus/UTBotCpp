@@ -40,7 +40,7 @@ namespace visitor {
             }
         }
         std::for_each(args.begin(), args.end(), [&type](std::string &arg) {
-            arg = NameDecorator::decorate(arg);
+            arg = NameDecorator::decorateForTests(arg);
         });
         return VerboseAssertsVisitor::FunctionSignature{ macroName, std::move(args) };
     }

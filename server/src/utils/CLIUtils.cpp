@@ -83,7 +83,8 @@ createSettingsContextByOptions(const SettingsContextOptionGroup &settingsContext
             settingsContextOptionGroup.getErrorMode(),
             settingsContextOptionGroup.doDifferentVariablesOfTheSameType(),
             settingsContextOptionGroup.getSkipObjectWithoutSource(),
-            settingsContextOptionGroup.doInstrumentUndefinedBehaviour());
+            settingsContextOptionGroup.doInstrumentUndefinedBehaviour(),
+            settingsContextOptionGroup.getTestLanguage());
 }
 
 std::vector<fs::path> getSourcePaths(const ProjectContextOptionGroup &projectContextOptions,
