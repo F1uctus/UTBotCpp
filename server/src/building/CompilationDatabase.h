@@ -17,11 +17,15 @@ public:
     const CollectionUtils::FileSet &getAllFiles() const;
     const fs::path &getBuildCompilerPath() const;
     const std::optional<fs::path>& getResourceDir() const;
+
+    /// What the project's own compiler targets; see CompilationUtils.
+    const std::optional<std::string>& getTargetTriple() const;
 private:
     std::unique_ptr<clang::tooling::CompilationDatabase> clangCompilationDatabase;
     CollectionUtils::FileSet allFiles;
     fs::path buildCompilerPath;
     std::optional<fs::path> resourceDir;
+    std::optional<std::string> targetTriple;
 
     CollectionUtils::FileSet initAllFiles() const;
     fs::path initBuildCompilerPath();

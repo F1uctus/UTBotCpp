@@ -256,6 +256,24 @@ namespace CompilationUtils {
         }
     }
 
+    std::optional<std::string> getTargetTriple(const fs::path &buildCompilerPath) {
+        fs::path compiler = buildCompilerPath;
+        if (!fs::exists(compiler)) {
+            compiler = getBundledCompilerPath(getCompilerName(buildCompilerPath));
+        }
+        auto [output, status, outPath] = ShellExecTask::runShellCommandTask(
+            ShellExecTask::ExecutionParameters(compiler.string(), { "-dumpmachine" }));
+        if (status != 0) {
+            LOG_S(WARNING) << "Could not ask " << compiler << " what it targets: " << output;
+            return std::nullopt;
+        }
+        StringUtils::trim(output);
+        if (output.empty()) {
+            return std::nullopt;
+        }
+        return output;
+    }
+
     std::string getIncludePath(const fs::path &includePath) {
         return "-I" + includePath.string();
     }

@@ -10,6 +10,7 @@ CompilationDatabase::CompilationDatabase(
     allFiles = initAllFiles();
     buildCompilerPath = initBuildCompilerPath();
     resourceDir = CompilationUtils::getResourceDirectory(buildCompilerPath);
+    targetTriple = CompilationUtils::getTargetTriple(buildCompilerPath);
 }
 
 CollectionUtils::FileSet CompilationDatabase::initAllFiles() const {
@@ -46,6 +47,10 @@ const fs::path &CompilationDatabase::getBuildCompilerPath() const {
 
 const std::optional<fs::path> &CompilationDatabase::getResourceDir() const {
     return resourceDir;
+}
+
+const std::optional<std::string> &CompilationDatabase::getTargetTriple() const {
+    return targetTriple;
 }
 std::unique_ptr<CompilationDatabase>
 CompilationDatabase::autoDetectFromDirectory(fs::path const& SourceDir, std::string &ErrorMessage) {

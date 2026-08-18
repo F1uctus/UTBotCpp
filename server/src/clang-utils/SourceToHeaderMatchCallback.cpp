@@ -444,6 +444,16 @@ void SourceToHeaderMatchCallback::print(const NamedDecl *decl, const PrintingPol
     if (externalStream == nullptr) {
         return;
     }
+    // A C++ header declares the project's types inside a namespace, so a copy
+    // of something the standard headers also declare is a harmless duplicate
+    // that nothing looks up. A C header has one scope, shared with the very
+    // headers the runner includes, and a second definition of FILE or
+    // localeinfo_struct there is an error rather than a duplicate. The system
+    // headers already declare them; this only has to declare what they do not.
+    if (Paths::generateCTestsFor(sourceFilePath) &&
+        decl->getASTContext().getSourceManager().isInSystemHeader(decl->getLocation())) {
+        return;
+    }
     auto pAlignmentAttr = decl->getAttr<MaxFieldAlignmentAttr>();
     if (pAlignmentAttr) {
         unsigned int alignment = pAlignmentAttr->getAlignment() / 8;

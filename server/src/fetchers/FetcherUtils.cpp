@@ -100,6 +100,19 @@ void ClangToolRunner::checkStatus(int status) const {
 }
 
 void ClangToolRunner::setResourceDirOption(clang::tooling::ClangTool *clangTool) {
+    // The clang the server links and the compiler the project is built with are
+    // different builds of clang, so without being told, the tool reads the
+    // sources for the platform the server was built for. That is not a detail:
+    // a vendor header picks its branch on __GNUC__ and gets none, the standard
+    // integer typedefs come out a different width than the ones the test will
+    // be compiled with, and the declarations the generated header carries then
+    // contradict the system headers beside them.
+    auto const &targetTriple = compilationDatabase->getTargetTriple();
+    if (targetTriple.has_value()) {
+        clangTool->appendArgumentsAdjuster(clang::tooling::getInsertArgumentAdjuster(
+            ("--target=" + targetTriple.value()).c_str(),
+            clang::tooling::ArgumentInsertPosition::END));
+    }
     auto const &resourceDir = compilationDatabase->getResourceDir();
     if (resourceDir.has_value()) {
         std::string resourceDirFlag =
