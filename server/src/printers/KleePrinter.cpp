@@ -203,9 +203,11 @@ fs::path KleePrinter::writeTmpKleeFile(
 
     strInclude("klee/klee.h") << printer::NL;
     ss << CALLOC_DECLARATION << printer::NL;
-    if (!KleeOptions::targetHasSymbolicFloatingPoint()) {
-        ss << bitsEqualDeclaration() << printer::NL;
-    }
+    // Recording a float post-state compares representations, not values, and
+    // goes on doing so now that floats are symbolic: x == x_post is false when
+    // x is NaN, so the assumption would be provably false and the path would
+    // die on exactly the runs worth reporting.
+    ss << bitsEqualDeclaration() << printer::NL;
     writeStubsForStructureFields(tests);
     writeAccessPrivateMacros(typesHandler, tests, false,
                              [methodFilter, onlyForOneClass, onlyForOneFunction, testedMethod, testedClass](

@@ -30,8 +30,11 @@ namespace visitor {
     std::string KleeAssumeVisitor::equalityAssumption(const types::Type &type,
                                                       const std::string &lhs,
                                                       const std::string &rhs) {
-        if (types::TypesHandler::isFloatingPointType(type) &&
-            !KleeOptions::targetHasSymbolicFloatingPoint()) {
+        if (types::TypesHandler::isFloatingPointType(type)) {
+            // Representations rather than values, whether or not the float is
+            // symbolic: == is false when either side is NaN, so assuming it
+            // kills the path instead of recording what happened on it. Equal
+            // bits is the equality that means "this is the value the run had".
             return PrinterUtils::getBitsEqualString(lhs, rhs);
         }
         return PrinterUtils::getEqualString(lhs, rhs);

@@ -23,7 +23,6 @@ namespace {
  *   --skip-not-symbolic-objects    narrows what is reported as an input
  *   --use-advanced-type-system     ) type reconstruction used when rendering
  *   --use-tbaa                     ) pointer-typed values
- *   --fp-runtime                   floating point model
  *   --use-cov-check                coverage-based stopping criterion
  *   --ubsan-runtime                only meaningful with the fork's UBSan model
  */
@@ -34,7 +33,6 @@ const std::set<std::string> forkOnlyOptions = {
     "--skip-not-symbolic-objects",
     "--use-advanced-type-system",
     "--use-tbaa",
-    "--fp-runtime",
     "--use-cov-check",
     // The fork's interactive server, which kept a process alive to be fed
     // entry points over a socket. What that was for -- not reloading the module
@@ -91,10 +89,12 @@ bool KleeOptions::targetHasPosixRuntime() {
 }
 
 bool KleeOptions::targetHasSymbolicFloatingPoint() {
-    // Verified against the KLEE this build targets: Instruction::FCmp calls
-    // toConstant() on both operands unconditionally, and there is no build
-    // option that changes it.
-    return false;
+    // --fp-runtime hands float arithmetic, comparison and the conversions
+    // either side of them to the solver. Without it an integer that reaches a
+    // float was concretised at the boundary, which pinned everything it had
+    // been computed from, and every branch below became infeasible: a
+    // three-branch function scaling its input by a float produced one test.
+    return true;
 }
 
 bool KleeOptions::targetHasEntryPointBatching() {
