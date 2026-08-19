@@ -178,6 +178,15 @@ namespace printer {
 
         std::string strFail(const std::string &message);
 
+    public:
+        /// A brace list made into something that can stand where a value is
+        /// expected; see the definition.
+        std::string constrStructValue(const types::Type &type, const std::string &value);
+
+    private:
+        std::string constrArgumentValue(const Tests::MethodParam &param,
+                                        const Tests::TestCaseParamValue &value);
+
         void printFailAssertion(ErrorMode errorMode);
     };
 }

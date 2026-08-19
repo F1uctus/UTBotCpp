@@ -286,20 +286,38 @@ void SourceToHeaderMatchCallback::generateInternal(const VarDecl *decl) const {
     std::string curDecl;
     llvm::raw_string_ostream curDeclStream{ curDecl };
     decl->print(curDeclStream, policy);
+    curDeclStream.flush();
     std::string wrapperPointerDecl =
         getRenamedDeclarationAsString(decl, policy, wrapperPointerName);
     std::string refDecl = getRenamedDeclarationAsString(decl, policy, refName);
     PrinterUtils::removeThreadLocalQualifiers(refDecl);
+
+    if (Paths::generateCTestsFor(sourceFilePath) && decl->isExternallyVisible()) {
+        // The getter exists so a test can reach a variable it cannot name --
+        // one the source declared static. A variable with external linkage is
+        // not that: the test can simply say extern and let the linker find it.
+        //
+        // Which matters here because C has no reference to bind, and the
+        // spelling that reaches the same variable by the same name -- a macro
+        // -- rewrites that name everywhere, including in the parameter lists
+        // of the functions below and the locals in the tests. A project with a
+        // global out_377 and functions taking an out_377 could not compile at
+        // all: the parameter became a call to the getter.
+        std::string externDecl = curDecl;
+        PrinterUtils::removeThreadLocalQualifiers(externDecl);
+        *internalStream << externC() << externDecl << ";\n";
+        return;
+    }
 
     std::string returnTypeName = PrinterUtils::getPointerMangledName(name);
     std::string getterName = PrinterUtils::getterName(wrapperName);
     *internalStream << generateTypedefForGetterReturnType(decl, policy, returnTypeName);
     *internalStream << externC() << PrinterUtils::getterDecl(returnTypeName, wrapperName) << ";\n";
     if (Paths::generateCTestsFor(sourceFilePath)) {
-        // "int (&x) = *get();" is a reference bound at load time, which C has
-        // no equivalent of. A macro reaches the same variable by the same name
-        // and costs a call per use, which for a handful of globals in a test is
-        // nothing.
+        // Only reachable for a variable the source kept to itself, where there
+        // is nothing to link against and the macro is the only way in. Its name
+        // is local to one file, so the collision described above is far less
+        // likely -- but it is the same macro, and the same hazard.
         *internalStream << stringFormat("#define %s (*%s())\n", decoratedName, getterName);
     } else {
         *internalStream << stringFormat("%s = *%s();\n", refDecl, getterName);

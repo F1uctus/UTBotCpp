@@ -807,10 +807,31 @@ TestsPrinter::methodParametersListParametrized(const Tests::MethodDescription &m
         } else if (!testCase.paramValues[i].lazyValues.empty()) {
             args.push_back(param.name);
         } else {
-            args.push_back(testCase.paramValues[i].view->getEntryValue(this));
+            args.push_back(constrArgumentValue(param, testCase.paramValues[i]));
         }
     }
     return args;
+}
+
+/**
+ * A brace list spelled so that it can stand where a value is expected.
+ *
+ * As an argument, or on the right of an assignment, C++ reads a brace list as
+ * initialising whatever it is being given to. C has no such thing: a value
+ * there needs a type of its own, which is what a compound literal writes.
+ * Where the list is initialising a declaration, both languages agree and this
+ * leaves it alone.
+ */
+std::string TestsPrinter::constrStructValue(const types::Type &type, const std::string &value) {
+    if (getLanguage() != utbot::Language::C || value.empty() || value.front() != '{') {
+        return value;
+    }
+    return "(" + type.typeName() + ") " + value;
+}
+
+std::string TestsPrinter::constrArgumentValue(const Tests::MethodParam &param,
+                                              const Tests::TestCaseParamValue &value) {
+    return constrStructValue(param.type, value.view->getEntryValue(this));
 }
 
 std::vector<std::string>

@@ -89,7 +89,11 @@ namespace visitor {
             if (needDeclaration) {
                 printer->strDeclareVar(type.usedType(), name, value, parameterAlignment);
             } else {
-                printer->strAssignVar(name, value);
+                // Assigning to something that already exists, not declaring it:
+                // a brace list is an initialiser and cannot appear on the right
+                // of an assignment. C++ reads it as one anyway; C wants the
+                // value to say what type it is, which is a compound literal.
+                printer->strAssignVar(name, printer->constrStructValue(type, value));
             }
         } else {
             printer->ss << value << printer::NL;
