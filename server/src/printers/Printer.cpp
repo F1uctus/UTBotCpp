@@ -126,7 +126,14 @@ namespace printer {
 
     void Printer::printAlignmentIfExists(const std::optional<uint64_t> &alignment) {
         if (alignment.has_value()) {
-            ss << stringFormat("__attribute__ ((aligned(%llu)))", alignment) << " ";
+            // The value, not the optional holding it: stringFormat ends in
+            // snprintf, so handing it a class type reads whatever the object's
+            // bytes happen to be. What came out was "aligned(4294967296)" --
+            // the flag byte beside the number, read as part of it -- and the
+            // compiler rejects the declaration it is attached to.
+            ss << stringFormat("__attribute__ ((aligned(%llu)))",
+                               static_cast<unsigned long long>(alignment.value()))
+               << " ";
         }
     }
 

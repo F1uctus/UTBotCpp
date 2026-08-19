@@ -107,11 +107,16 @@ void ClangToolRunner::setResourceDirOption(clang::tooling::ClangTool *clangTool)
     // integer typedefs come out a different width than the ones the test will
     // be compiled with, and the declarations the generated header carries then
     // contradict the system headers beside them.
+    // At the beginning, so that it is only a default: a project cross-compiled
+    // for a board says so in the command itself, and the last --target on a
+    // clang command line is the one that counts. Putting the compiler's own
+    // default last would read every source for the machine the compiler runs
+    // on, which is exactly the case this is here to prevent.
     auto const &targetTriple = compilationDatabase->getTargetTriple();
     if (targetTriple.has_value()) {
         clangTool->appendArgumentsAdjuster(clang::tooling::getInsertArgumentAdjuster(
             ("--target=" + targetTriple.value()).c_str(),
-            clang::tooling::ArgumentInsertPosition::END));
+            clang::tooling::ArgumentInsertPosition::BEGIN));
     }
     auto const &resourceDir = compilationDatabase->getResourceDir();
     if (resourceDir.has_value()) {
