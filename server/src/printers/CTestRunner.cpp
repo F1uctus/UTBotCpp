@@ -21,6 +21,11 @@ namespace CTestRunner {
  * Define UTBOT_TEST_NO_STDIO to build without <stdio.h>: no messages, no
  * command line, no report file. main() runs every test and returns how many
  * failed, which is all a board without a console can report anyway.
+ *
+ * Define UTBOT_TEST_BRIEF to print only failures and the closing count. A
+ * board's console is the debugger, one round trip per character, and a line
+ * per test either way is the difference between a run that finishes and one
+ * that is still talking when the session times out.
  */
 #ifndef UTBOT_C_TEST_RUNNER
 #define UTBOT_C_TEST_RUNNER
@@ -382,14 +387,18 @@ static int utbot_run_tests(int argc, char **argv, const utbot_test_case *cases, 
             continue;
         }
         ++selected;
+#ifndef UTBOT_TEST_BRIEF
         printf("[ RUN      ] %s\n", shown);
+#endif
         utbot_current_test_failed = 0;
         cases[index].body();
         if (utbot_current_test_failed) {
             ++failed;
             printf("[  FAILED  ] %s\n", shown);
         } else {
+#ifndef UTBOT_TEST_BRIEF
             printf("[       OK ] %s\n", shown);
+#endif
         }
     }
 
