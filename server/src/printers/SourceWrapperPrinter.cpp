@@ -22,16 +22,39 @@ namespace printer {
         strComment("A test fills the array with what its run recorded, one entry per call.")
             << printer::NL;
 
+        // Weak, so that a binary can hold more than one unit's wrappers.
+        //
+        // Two units that both call the same driver each get a stand-in for it,
+        // and a test image that carries both -- which is what happens as soon
+        // as a unit reaches a global or a helper defined in its neighbour --
+        // could not be linked: two definitions of PORT_ReadInputDataBit. Weak
+        // makes them interchangeable, which they are: each is the same
+        // function reading its own recorded answers, and the one the linker
+        // keeps is fed by whichever test is running.
+        //
+        // Spelled per compiler, because the two that build these tests do not
+        // agree: IAR takes __weak before the declaration, GCC and clang take
+        // an attribute. A compiler that has neither gets a strong definition
+        // and the old behaviour.
+        ss << "#if defined(__ICCARM__)" << printer::NL
+           << "#define UTBOT_MOCK_LINKAGE __weak" << printer::NL
+           << "#elif defined(__GNUC__)" << printer::NL
+           << "#define UTBOT_MOCK_LINKAGE __attribute__((weak))" << printer::NL
+           << "#else" << printer::NL
+           << "#define UTBOT_MOCK_LINKAGE" << printer::NL
+           << "#endif" << printer::NL << printer::NL;
+
         for (const auto &[functionName, functionInfo]: mockedFunctions) {
             const std::string varName = StubsUtils::getMockedFunctionVarName(functionName);
             const std::string counterName =
                 StubsUtils::getMockedFunctionCounterName(functionName);
             const std::string returnType = functionInfo->returnType.usedType();
 
-            ss << returnType << " " << varName << "[" << capacity << "];" << printer::NL;
-            ss << "int " << counterName << ";" << printer::NL;
+            ss << "UTBOT_MOCK_LINKAGE " << returnType << " " << varName << "[" << capacity << "];"
+               << printer::NL;
+            ss << "UTBOT_MOCK_LINKAGE int " << counterName << ";" << printer::NL;
 
-            ss << returnType << " " << functionName << "(";
+            ss << "UTBOT_MOCK_LINKAGE " << returnType << " " << functionName << "(";
             for (size_t i = 0; i < functionInfo->params.size(); i++) {
                 const auto &param = functionInfo->params[i];
                 ss << param.type.usedType();
