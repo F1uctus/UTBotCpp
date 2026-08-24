@@ -18,9 +18,11 @@ namespace printer {
         const size_t capacity =
             types::TypesHandler::getElementsNumberInPointerOneDim(types::PointerUsage::PARAMETER);
 
-        strComment("Stand-ins for the functions KLEE answers instead of calling.") << printer::NL;
-        strComment("A test fills the array with what its run recorded, one entry per call.")
-            << printer::NL;
+        strComment("Stand-ins for the functions KLEE answers instead of calling.");
+        strComment("One that returns a value reads it from an array a test fills with what its");
+        strComment("run recorded, one entry per call; one that returns nothing has nothing to");
+        strComment("replay and only has to answer the call here.");
+        ss << printer::NL;
 
         // Weak, so that a binary can hold more than one unit's wrappers.
         //
@@ -65,9 +67,18 @@ namespace printer {
                 StubsUtils::getMockedFunctionCounterName(functionName);
             const std::string returnType = functionInfo->returnType.usedType();
 
-            ss << "UTBOT_MOCK_STORAGE " << returnType << " " << varName << "[" << capacity
-               << "] = {0};" << printer::NL;
-            ss << "UTBOT_MOCK_STORAGE int " << counterName << " = 0;" << printer::NL;
+            // A function that returns nothing has no answer to hand back, so it
+            // gets no array and no counter: what a test needs from it is that
+            // the call is answered here rather than escaping the test binary,
+            // and that it resolves at link time.
+            const bool returnsNothing =
+                types::TypesHandler::isVoid(functionInfo->returnType);
+
+            if (!returnsNothing) {
+                ss << "UTBOT_MOCK_STORAGE " << returnType << " " << varName << "[" << capacity
+                   << "] = {0};" << printer::NL;
+                ss << "UTBOT_MOCK_STORAGE int " << counterName << " = 0;" << printer::NL;
+            }
 
             ss << "UTBOT_MOCK_LINKAGE " << returnType << " " << functionName << "(";
             for (size_t i = 0; i < functionInfo->params.size(); i++) {
@@ -91,13 +102,15 @@ namespace printer {
                     ss << "    (void) " << param.name << ";" << printer::NL;
                 }
             }
-            // A run that answered more calls than the array holds keeps the
-            // last answer rather than reading past the end. The path a test
-            // replays never gets there, and repeating is the lesser wrong.
-            ss << "    if (" << counterName << " >= " << capacity << ") {" << printer::NL;
-            ss << "        return " << varName << "[" << capacity - 1 << "];" << printer::NL;
-            ss << "    }" << printer::NL;
-            ss << "    return " << varName << "[" << counterName << "++];" << printer::NL;
+            if (!returnsNothing) {
+                // A run that answered more calls than the array holds keeps the
+                // last answer rather than reading past the end. The path a test
+                // replays never gets there, and repeating is the lesser wrong.
+                ss << "    if (" << counterName << " >= " << capacity << ") {" << printer::NL;
+                ss << "        return " << varName << "[" << capacity - 1 << "];" << printer::NL;
+                ss << "    }" << printer::NL;
+                ss << "    return " << varName << "[" << counterName << "++];" << printer::NL;
+            }
             ss << "}" << printer::NL;
         }
         ss << printer::NL;

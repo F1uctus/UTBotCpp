@@ -10,17 +10,32 @@ using namespace clang;
 
 namespace {
 
-/// Whether a value of this type can be recorded in a test case and handed back
-/// by a stand-in.
+/// Whether a call to a function returning this type can be answered by a
+/// stand-in.
 ///
-/// A scalar can: it is a fixed number of bytes with no interior structure to
-/// rebuild. Anything else -- a struct returned by value, a pointer into an
-/// object the test would also have to recreate -- would need the object graph
-/// as well as the bytes, and a stand-in that returned the bytes alone would be
-/// worse than no stand-in at all.
-bool canBeStoodInFor(const types::Type &type) {
-    return types::TypesHandler::isPrimitiveType(type) &&
-           !types::TypesHandler::isVoid(type);
+/// One that returns nothing always can, and needs nothing recorded to do it:
+/// there is no answer to reproduce, so the stand-in is an empty body, and an
+/// empty body is what the analysis itself did when it reached the call. A
+/// configure-and-return entry point is shaped like this, and there are usually
+/// more of those than of anything else, so leaving them out left out the
+/// majority of the calls an image has to answer.
+///
+/// One that returns something can be stood in for when the value is a scalar:
+/// a fixed number of bytes with no interior structure to rebuild. An
+/// enumeration counts, and matters more than its share of the call sites: a
+/// two-state result is often spelled as one, so a loop that waits on such a
+/// result is a loop a stand-in has to be able to answer, and one that cannot
+/// replay an enum leaves it reading whatever some fallback guessed.
+///
+/// Anything else -- a struct returned by value, a pointer into an object the
+/// test would also have to recreate -- would need the object graph as well as
+/// the bytes, and a stand-in that returned the bytes alone would be worse than
+/// no stand-in at all.
+bool canBeStoodInFor(const QualType &returnQualType, const types::Type &returnType) {
+    if (types::TypesHandler::isVoid(returnType) || returnQualType->isEnumeralType()) {
+        return true;
+    }
+    return types::TypesHandler::isPrimitiveType(returnType);
 }
 
 } // namespace
@@ -66,7 +81,7 @@ void MockedFunctionUsageMatchCallback::run(const MatchFinder::MatchResult &Resul
     QualType returnQualType = callee->getReturnType();
     types::Type returnType =
         ParamsHandler::getType(returnQualType, returnQualType, sourceManager);
-    if (!canBeStoodInFor(returnType)) {
+    if (!canBeStoodInFor(returnQualType, returnType)) {
         if (reported.insert(name).second) {
             LOG_S(DEBUG) << "Function \"" << name
                          << "\" has no definition, but its return type cannot be "
