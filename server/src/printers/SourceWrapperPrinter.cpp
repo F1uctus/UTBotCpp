@@ -24,24 +24,39 @@ namespace printer {
 
         // Weak, so that a binary can hold more than one unit's wrappers.
         //
-        // Two units that both call the same driver each get a stand-in for it,
-        // and a test image that carries both -- which is what happens as soon
-        // as a unit reaches a global or a helper defined in its neighbour --
-        // could not be linked: two definitions of PORT_ReadInputDataBit. Weak
-        // makes them interchangeable, which they are: each is the same
-        // function reading its own recorded answers, and the one the linker
-        // keeps is fed by whichever test is running.
+        // Two units that both call the same undefined function each get a
+        // stand-in for it, and a binary that carries both -- which is what
+        // happens as soon as a unit reaches a global or a helper defined in its
+        // neighbour -- could not be linked: two definitions of one name. Weak
+        // makes them interchangeable, which they are: each is the same function
+        // reading its own recorded answers, and the one the linker keeps is fed
+        // by whichever test is running.
         //
-        // Spelled per compiler, because the two that build these tests do not
-        // agree: IAR takes __weak before the declaration, GCC and clang take
-        // an attribute. A compiler that has neither gets a strong definition
-        // and the old behaviour.
+        // Spelled per compiler, because the ones that build these tests do not
+        // agree: IAR takes __weak before the declaration, GCC and clang take an
+        // attribute. A compiler that has neither gets a strong definition and
+        // the old behaviour.
+        //
+        // The arrays need a second spelling on PE, where a weak definition is
+        // emitted as an alias that the linker's auto-export pass skips. The
+        // definition is in the shared object either way, but nothing outside it
+        // can name one that is not exported, and a test that cannot name the
+        // array cannot fill it -- so every test linked against a wrapper that
+        // stands in for anything failed to link. selectany is the COMDAT the
+        // export pass does keep, and it folds duplicates the same way weak
+        // does. It wants an initializer, which is why the arrays carry one.
         ss << "#if defined(__ICCARM__)" << printer::NL
            << "#define UTBOT_MOCK_LINKAGE __weak" << printer::NL
+           << "#define UTBOT_MOCK_STORAGE __weak" << printer::NL
+           << "#elif defined(_WIN32) && (defined(__GNUC__) || defined(_MSC_VER))" << printer::NL
+           << "#define UTBOT_MOCK_LINKAGE __attribute__((weak))" << printer::NL
+           << "#define UTBOT_MOCK_STORAGE __declspec(selectany)" << printer::NL
            << "#elif defined(__GNUC__)" << printer::NL
            << "#define UTBOT_MOCK_LINKAGE __attribute__((weak))" << printer::NL
+           << "#define UTBOT_MOCK_STORAGE __attribute__((weak))" << printer::NL
            << "#else" << printer::NL
            << "#define UTBOT_MOCK_LINKAGE" << printer::NL
+           << "#define UTBOT_MOCK_STORAGE" << printer::NL
            << "#endif" << printer::NL << printer::NL;
 
         for (const auto &[functionName, functionInfo]: mockedFunctions) {
@@ -50,9 +65,9 @@ namespace printer {
                 StubsUtils::getMockedFunctionCounterName(functionName);
             const std::string returnType = functionInfo->returnType.usedType();
 
-            ss << "UTBOT_MOCK_LINKAGE " << returnType << " " << varName << "[" << capacity << "];"
-               << printer::NL;
-            ss << "UTBOT_MOCK_LINKAGE int " << counterName << ";" << printer::NL;
+            ss << "UTBOT_MOCK_STORAGE " << returnType << " " << varName << "[" << capacity
+               << "] = {0};" << printer::NL;
+            ss << "UTBOT_MOCK_STORAGE int " << counterName << " = 0;" << printer::NL;
 
             ss << "UTBOT_MOCK_LINKAGE " << returnType << " " << functionName << "(";
             for (size_t i = 0; i < functionInfo->params.size(); i++) {

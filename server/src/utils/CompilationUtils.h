@@ -69,8 +69,8 @@ namespace CompilationUtils {
      * Needed because the clang the server links and the compiler the project
      * is built with are different builds of clang with different defaults. The
      * AST the server reads has to be the one the project's compiler would
-     * produce: the target decides which branch of a vendor header is taken,
-     * how wide int_fast16_t is, and whether __GNUC__ is defined at all.
+     * produce: the target decides which branch of a third-party header is
+     * taken, how wide int_fast16_t is, and whether __GNUC__ is defined at all.
      */
     std::optional<std::string> getTargetTriple(const fs::path &buildCompilerPath);
 
