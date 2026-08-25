@@ -313,13 +313,21 @@ void SourceToHeaderMatchCallback::generateInternal(const VarDecl *decl) const {
     std::string getterName = PrinterUtils::getterName(wrapperName);
     *internalStream << generateTypedefForGetterReturnType(decl, policy, returnTypeName);
     *internalStream << externC() << PrinterUtils::getterDecl(returnTypeName, wrapperName) << ";\n";
-    if (Paths::generateCTestsFor(sourceFilePath)) {
-        // Only reachable for a variable the source kept to itself, where there
-        // is nothing to link against and the macro is the only way in. Its name
-        // is local to one file, so the collision described above is far less
-        // likely -- but it is the same macro, and the same hazard.
-        *internalStream << stringFormat("#define %s (*%s())\n", decoratedName, getterName);
-    } else {
+    // Only reachable for a variable the source kept to itself. C++ binds a
+    // reference to the getter's result and the variable keeps its name; C has no
+    // reference to bind, so a test spells the call itself, at the one place it
+    // means the global.
+    //
+    // C used to get a macro instead, and a macro cannot be aimed: it rewrites
+    // the name everywhere the header reaches. Both places that matters are
+    // ordinary C rather than bad luck. A file-static global is often shadowed by
+    // a parameter of the same name in the same file, so the forwarders printed
+    // just below took the macro in their parameter lists; and the printer names
+    // a test's locals after the parameters of the function under test, so a test
+    // passing an argument of that name declared a local the macro rewrote too.
+    // Either one costs the whole file, and neither had anything to do with
+    // wanting the global.
+    if (!Paths::generateCTestsFor(sourceFilePath)) {
         *internalStream << stringFormat("%s = *%s();\n", refDecl, getterName);
     }
 }

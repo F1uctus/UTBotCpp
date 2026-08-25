@@ -505,7 +505,8 @@ void TestsPrinter::verboseParameters(const Tests::MethodDescription &methodDescr
                 verboseParameter(methodDescription, valueParam, value, true);
                 gen2DPointer(param, false);
             } else {
-                verboseParameter(methodDescription, param, value, false);
+                verboseParameter(methodDescription, globalParamAs(methodDescription, param), value,
+                                 false);
             }
         }
         ss << printer::NL;
@@ -710,6 +711,28 @@ void TestsPrinter::changeableParamsAsserts(const Tests::MethodDescription &metho
     }
 }
 
+std::string TestsPrinter::globalAccess(const Tests::MethodDescription &methodDescription,
+                                       const Tests::MethodParam &param) const {
+    // Only C, and only for a variable the source kept to itself: everything else
+    // has a name the test can write, and a name is what the rest of the printer
+    // is built to take apart -- a field access or a subscript appends to it.
+    // Dereferencing the getter keeps that working, because it is parenthesised.
+    //
+    // A function pointer is left alone: its name is also used to build the stub
+    // it points at, and that has to stay an identifier.
+    if (!param.isFileStatic || !utbot::TestLanguage::isC() ||
+        param.type.isPointerToFunction() || param.type.isArrayOfPointersToFunction()) {
+        return param.name;
+    }
+    return PrinterUtils::fileStaticAccess(param.name, projectContext,
+                                          methodDescription.sourceFilePath);
+}
+
+Tests::MethodParam TestsPrinter::globalParamAs(const Tests::MethodDescription &methodDescription,
+                                               const Tests::MethodParam &param) const {
+    return { param.type, globalAccess(methodDescription, param), param.alignment };
+}
+
 void TestsPrinter::globalParamsAsserts(const Tests::MethodDescription &methodDescription,
                                        const Tests::MethodTestCase &testCase){
 
@@ -722,7 +745,7 @@ void TestsPrinter::globalParamsAsserts(const Tests::MethodDescription &methodDes
         auto expectedType = typesHandler->getReturnTypeToCheck(param.type);
         Tests::MethodParam expectedParam{expectedType, expectedName, param.alignment};
         parameterVisitor.visit(expectedParam.type, expectedParam.name, value.view.get(), std::nullopt);
-        assertsVisitor.visitGlobal(param, param.name);
+        assertsVisitor.visitGlobal(param, globalAccess(methodDescription, param), param.name);
     }
 }
 
@@ -888,7 +911,7 @@ void printer::TestsPrinter::parametrizedInitializeGlobalVariables(const Tests::M
     for (auto i = 0; i < methodDescription.globalParams.size(); i++) {
         const auto &param = methodDescription.globalParams[i];
         const auto &value = testCase.globalPreValues[i];
-        verboseParameter(methodDescription, param, value, false);
+        verboseParameter(methodDescription, globalParamAs(methodDescription, param), value, false);
     }
 }
 

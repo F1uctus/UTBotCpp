@@ -20,8 +20,14 @@ namespace visitor {
         expectedVariable = {};
     }
 
-    void VerboseAssertsParamVisitor::visitGlobal(const Tests::MethodParam &param, const std::string &name) {
-        expectedVariable = PrinterUtils::getExpectedVarName(name);
+    void VerboseAssertsParamVisitor::visitGlobal(const Tests::MethodParam &param,
+                                                 const std::string &name,
+                                                 const std::string &plainName) {
+        // Two names, because how a test reaches the global and what it calls the
+        // copy it compares against are not always the same string: a global the
+        // source kept to itself is reached through a getter, and "expected_"
+        // followed by a call expression is not an identifier.
+        expectedVariable = PrinterUtils::getExpectedVarName(plainName.empty() ? name : plainName);
         visitAny(param.type, name, nullptr, PrinterUtils::DEFAULT_ACCESS, 0);
         expectedVariable = {};
     }

@@ -357,12 +357,20 @@ namespace tests {
 
             bool hasIncompleteType = false;
 
+            /// Set on a global the source declared static.
+            ///
+            /// Such a variable has no name outside the file that defines it, so
+            /// a test reaches it through the getter the wrapper exports rather
+            /// than by writing its name. Only meaningful for globalParams.
+            bool isFileStatic = false;
+
             MethodParam(types::Type type,
                         std::string name,
                         std::optional<size_t> alignment,
-                        bool hasIncompleteType = false)
+                        bool hasIncompleteType = false,
+                        bool isFileStatic = false)
                 : type(std::move(type)), name(std::move(name)), alignment(alignment),
-                  hasIncompleteType(hasIncompleteType) {
+                  hasIncompleteType(hasIncompleteType), isFileStatic(isFileStatic) {
 
             }
 

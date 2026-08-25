@@ -90,6 +90,17 @@ namespace printer {
         void globalParamsAsserts(const Tests::MethodDescription &methodDescription,
                                  const Tests::MethodTestCase &testCase);
 
+        /**
+         * How this test spells a global: its own name, or, for one the source
+         * declared static in C, a dereference of the getter the wrapper exports.
+         */
+        std::string globalAccess(const Tests::MethodDescription &methodDescription,
+                                 const Tests::MethodParam &param) const;
+
+        /// \p param with globalAccess() in place of its name.
+        Tests::MethodParam globalParamAs(const Tests::MethodDescription &methodDescription,
+                                         const Tests::MethodParam &param) const;
+
         void parametrizedAsserts(const tests::Tests::MethodDescription &methodDescription,
                                  const Tests::MethodTestCase &testCase,
                                  const std::optional<LineInfo::PredicateInfo>& predicateInfo,

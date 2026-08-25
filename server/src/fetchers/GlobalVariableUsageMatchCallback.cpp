@@ -66,7 +66,11 @@ void GlobalVariableUsageMatchCallback::handleUsage(const clang::FunctionDecl *fu
     const clang::QualType realParamType = varDecl->getType().getCanonicalType();
     const std::string usedParamTypeString = varDecl->getType().getAsString();
     types::Type paramType = types::Type(realParamType, usedParamTypeString, sourceManager);
-    method.globalParams.emplace_back(paramType, usage.variableName, AlignmentFetcher::fetch(varDecl));
+    // A variable the source kept to itself has no name outside its file, so the
+    // test has to go through the getter the wrapper exports. Recorded here
+    // because this is where the declaration is still in hand.
+    method.globalParams.emplace_back(paramType, usage.variableName, AlignmentFetcher::fetch(varDecl),
+                                     false, !varDecl->isExternallyVisible());
     if (!paramType.isPointerToFunction() && varDecl->isExternC() && !varDecl->hasDefinition()) {
         tests.externVariables.insert({paramType, usage.variableName});
     }

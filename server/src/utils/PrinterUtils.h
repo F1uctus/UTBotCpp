@@ -97,6 +97,19 @@ namespace PrinterUtils {
     std::string getterDecl(const std::string &returnTypeName,
                            const std::string &wrapperName);
 
+    /**
+     * How a C test names a global the source declared static.
+     *
+     * Such a variable has no name to link against, and a macro that gave it one
+     * would rewrite every other use of that identifier in the test -- including
+     * the locals the printer names after the function's own parameters, which
+     * on real code collide often. So the test dereferences the getter instead,
+     * and nothing but the global itself is spelled this way.
+     */
+    std::string fileStaticAccess(const std::string &declName,
+                                 utbot::ProjectContext const &projectContext,
+                                 const fs::path &sourceFilePath);
+
     std::string getFieldAccess(const std::string &objectName, const types::Field &field);
 
     std::string getConstQualifier(bool constQualifiedValue);

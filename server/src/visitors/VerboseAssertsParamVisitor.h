@@ -12,7 +12,8 @@ namespace visitor {
 
     void visit(const Tests::MethodParam &param, const std::string &name);
 
-    void visitGlobal(const Tests::MethodParam &param, const std::string &name);
+    void visitGlobal(const Tests::MethodParam &param, const std::string &name,
+                     const std::string &plainName = "");
 
   protected:
     void visitPointer(const types::Type &type,

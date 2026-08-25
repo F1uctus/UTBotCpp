@@ -37,6 +37,13 @@ namespace PrinterUtils {
         return StringUtils::stringFormat("%s %s()", returnTypeName, gName);
     }
 
+    std::string fileStaticAccess(const std::string &declName,
+                                 utbot::ProjectContext const &projectContext,
+                                 const fs::path &sourceFilePath) {
+        return StringUtils::stringFormat(
+            "(*%s())", getterName(wrapperName(declName, projectContext, sourceFilePath)));
+    }
+
     std::string getFieldAccess(const std::string &objectName, const types::Field &field) {
         if (field.name.empty()) {
             return objectName;
