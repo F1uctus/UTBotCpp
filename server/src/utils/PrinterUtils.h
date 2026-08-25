@@ -110,6 +110,15 @@ namespace PrinterUtils {
                                  utbot::ProjectContext const &projectContext,
                                  const fs::path &sourceFilePath);
 
+    /**
+     * The #include lines \p declarations needs to be readable on their own.
+     *
+     * Matched by name against what was actually printed, so a header carries
+     * only what its own declarations use, and a header guard makes a repeat of
+     * one the runner already includes cost nothing.
+     */
+    std::string standardIncludesFor(const std::string &declarations);
+
     std::string getFieldAccess(const std::string &objectName, const types::Field &field);
 
     std::string getConstQualifier(bool constQualifiedValue);
@@ -227,6 +236,26 @@ namespace PrinterUtils {
     // correct way would be to collect them while traversing types and write at the beginning of
     // header file.
     static const std::vector<std::string> KNOWN_IMPLICIT_RECORD_DECLS = { "struct __va_list_tag;" };
+
+    /**
+     * The standard header each standard type comes from.
+     *
+     * A type the project defines can have a member whose own type belongs to
+     * the standard library -- a jmp_buf, a va_list -- and the generated header
+     * re-declares the former having never declared the latter. The source
+     * reached that type through an include, and so must the header: the type is
+     * left where it is, rather than being reproduced, precisely so that it stays
+     * the one the compiler building the test agrees with.
+     *
+     * Only types that turn up inside a struct or a signature are worth listing.
+     * Anything else a declaration mentions is one the printer wrote itself.
+     */
+    static const std::vector<std::pair<std::string, std::string>> STANDARD_TYPE_HEADERS = {
+        { "jmp_buf", "setjmp.h" },
+        { "va_list", "stdarg.h" },
+        { "FILE", "stdio.h" },
+        { "sig_atomic_t", "signal.h" },
+    };
     const std::string KNOWN_IMPLICIT_RECORD_DECLS_CODE =
         StringUtils::joinWith(KNOWN_IMPLICIT_RECORD_DECLS, "\n");
 

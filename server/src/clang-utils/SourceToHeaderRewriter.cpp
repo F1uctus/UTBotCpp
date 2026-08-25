@@ -103,13 +103,22 @@ std::string SourceToHeaderRewriter::generateTestHeader(const fs::path &sourceFil
         // _Alignas survives: clang prints an alignment attribute after the
         // member it belongs to, which no dialect accepts, and defining it away
         // is what makes such a struct printable at all.
+        // A declaration can name a standard type it does not itself declare --
+        // a struct with a jmp_buf in it -- and the header has to include what
+        // the source included for it to be readable on its own.
+        const std::string declarations =
+            sourceDeclarations.externalDeclarations + sourceDeclarations.internalDeclarations +
+            sourceDeclarations.unnamedTypeDeclarations;
+
         return StringUtils::stringFormat("%s\n"
                                          "#define _Alignas(x)\n"
                                          "%s\n"
                                          "%s\n"
                                          "%s\n"
+                                         "%s\n"
                                          "\n%s",
                                          Copyright::GENERATED_C_CPP_FILE_HEADER,
+                                         PrinterUtils::standardIncludesFor(declarations),
                                          PrinterUtils::KNOWN_IMPLICIT_RECORD_DECLS_CODE,
                                          sourceDeclarations.externalDeclarations,
                                          sourceDeclarations.internalDeclarations,

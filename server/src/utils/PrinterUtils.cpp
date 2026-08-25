@@ -5,6 +5,9 @@
 
 #include "loguru.h"
 
+#include <regex>
+#include <sstream>
+
 namespace PrinterUtils {
 
     std::string convertToBytesFunctionName(const std::string &typeName) {
@@ -42,6 +45,20 @@ namespace PrinterUtils {
                                  const fs::path &sourceFilePath) {
         return StringUtils::stringFormat(
             "(*%s())", getterName(wrapperName(declName, projectContext, sourceFilePath)));
+    }
+
+    std::string standardIncludesFor(const std::string &declarations) {
+        std::stringstream ss;
+        for (const auto &[typeName, header] : STANDARD_TYPE_HEADERS) {
+            // As a whole word: a struct field called jmp_buffer is not a
+            // jmp_buf, and pulling in a header on the strength of a substring
+            // would be a guess.
+            const std::regex wholeWord("\\b" + typeName + "\\b");
+            if (std::regex_search(declarations, wholeWord)) {
+                ss << "#include <" << header << ">\n";
+            }
+        }
+        return ss.str();
     }
 
     std::string getFieldAccess(const std::string &objectName, const types::Field &field) {
