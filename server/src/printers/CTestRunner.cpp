@@ -26,6 +26,16 @@ namespace CTestRunner {
  * board's console is the debugger, one round trip per character, and a line
  * per test either way is the difference between a run that finishes and one
  * that is still talking when the session times out.
+ *
+ * Define UTBOT_TEST_SKIP_ERROR_SUITE to leave the error suite unrun. Those
+ * tests replay a path a sanitizer objected to, and they assert that reaching
+ * the end of the function is a failure -- which is what happens wherever a
+ * sanitizer is what stops it. On a target there is none, so the call goes
+ * through, and where what it does is index far past the end of an array it
+ * overwrites the stack it returned through. The test does not fail there; it
+ * does not come back at all, and the rest of the suite never runs. A target
+ * needs the filter that a hosted run can pass on the command line, and has
+ * neither a command line nor an environment to pass it in.
  */
 #ifndef UTBOT_C_TEST_RUNNER
 #define UTBOT_C_TEST_RUNNER
@@ -47,6 +57,18 @@ typedef struct {
     const char *name;
     utbot_test_body body;
 } utbot_test_case;
+
+/* The suite a generated error test is filed under, and the one
+   UTBOT_TEST_SKIP_ERROR_SUITE leaves out. Compared rather than matched: it is
+   one exact name, and a target should not carry a pattern matcher to find it. */
+#define UTBOT_ERROR_SUITE_NAME "error"
+
+#ifdef UTBOT_TEST_SKIP_ERROR_SUITE
+#define UTBOT_TEST_IS_SKIPPED(testCase) \
+    (strcmp((testCase).suite, UTBOT_ERROR_SUITE_NAME) == 0)
+#else
+#define UTBOT_TEST_IS_SKIPPED(testCase) 0
+#endif
 
 /* gtest's TEST(suite, name) { ... } declares a class and registers it. Here it
    opens a plain function, and the table at the end of the file is the
@@ -301,6 +323,9 @@ static int utbot_run_tests(int argc, char **argv, const utbot_test_case *cases, 
     (void) argv;
     (void) utbot_filter_matches;
     for (index = 0; index < count; ++index) {
+        if (UTBOT_TEST_IS_SKIPPED(cases[index])) {
+            continue;
+        }
         utbot_current_test_failed = 0;
         cases[index].body();
         failed += utbot_current_test_failed;
@@ -383,6 +408,9 @@ static int utbot_run_tests(int argc, char **argv, const utbot_test_case *cases, 
                                cases[index].name);
         int fits = written > 0 && (size_t) written < sizeof(fullName);
         const char *shown = fits ? fullName : cases[index].name;
+        if (UTBOT_TEST_IS_SKIPPED(cases[index])) {
+            continue;
+        }
         if (fits && !utbot_filter_matches(filter, fullName)) {
             continue;
         }
