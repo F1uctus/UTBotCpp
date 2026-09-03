@@ -86,9 +86,46 @@ static int utbot_current_test_failed = 0;
 #define UTBOT_SAY(...) ((void) printf(__VA_ARGS__))
 #endif
 
-static void utbot_report_failure(const char *file, int line, const char *what) {
+/* How many failures one test reports before it stops describing them. A test
+   that compares a large struct field by field can fail on most of them, and on
+   a target the console is the debugger -- one round trip per character, so the
+   report costs far more than the run. A unit whose first test failed wide spent
+   twelve minutes printing and never reached its second.
+   The count is still exact: what is bounded is the description, not the
+   detection, and the test is marked failed either way. */
+#ifndef UTBOT_TEST_MAX_REPORTED_FAILURES
+#define UTBOT_TEST_MAX_REPORTED_FAILURES 8
+#endif
+
+static int utbot_current_test_reported = 0;
+
+/* Only the basename: the directory is the same for every line and is most of
+   what each one costs to print. */
+static const char *utbot_basename(const char *path) {
+    const char *last = path;
+    const char *scan;
+    for (scan = path; *scan != '\0'; ++scan) {
+        if (*scan == '/' || *scan == '\\') {
+            last = scan + 1;
+        }
+    }
+    return last;
+}
+
+/* Returns whether it described this one, so the caller can skip printing the
+   values behind it too. */
+static int utbot_report_failure(const char *file, int line, const char *what) {
     utbot_current_test_failed = 1;
-    UTBOT_SAY("%s:%d: Failure\n  %s\n", file, line, what);
+    if (utbot_current_test_reported >= UTBOT_TEST_MAX_REPORTED_FAILURES) {
+        if (utbot_current_test_reported == UTBOT_TEST_MAX_REPORTED_FAILURES) {
+            ++utbot_current_test_reported;
+            UTBOT_SAY("  ... further failures in this test not shown\n");
+        }
+        return 0;
+    }
+    ++utbot_current_test_reported;
+    UTBOT_SAY("%s:%d: Failure\n  %s\n", utbot_basename(file), line, what);
+    return 1;
 }
 
 /* Showing the values behind a failed comparison needs a way to ask what type
@@ -176,10 +213,11 @@ static inline int utbot_double_almost_eq(double lhs, double rhs) {
 #define UTBOT_EXPECT_RELATION(lhs, rhs, op)                                   \
     do {                                                                      \
         if (!((lhs) op (rhs))) {                                              \
-            utbot_report_failure(__FILE__, __LINE__,                          \
-                                 "expected (" #lhs ") " #op " (" #rhs ")");   \
-            UTBOT_SHOW("left", (lhs));                                        \
-            UTBOT_SHOW("right", (rhs));                                       \
+            if (utbot_report_failure(__FILE__, __LINE__,                      \
+                                 "expected (" #lhs ") " #op " (" #rhs ")")) { \
+                UTBOT_SHOW("left", (lhs));                                    \
+                UTBOT_SHOW("right", (rhs));                                   \
+            }                                                                 \
         }                                                                     \
     } while (0)
 
@@ -200,20 +238,22 @@ static inline int utbot_double_almost_eq(double lhs, double rhs) {
 #define EXPECT_FLOAT_EQ(lhs, rhs)                                             \
     do {                                                                      \
         if (!utbot_float_almost_eq((float) (lhs), (float) (rhs))) {           \
-            utbot_report_failure(__FILE__, __LINE__,                          \
-                                 "expected (" #lhs ") equals (" #rhs ")");    \
-            UTBOT_SHOW("left", (float) (lhs));                                \
-            UTBOT_SHOW("right", (float) (rhs));                               \
+            if (utbot_report_failure(__FILE__, __LINE__,                      \
+                                 "expected (" #lhs ") equals (" #rhs ")")) {  \
+                UTBOT_SHOW("left", (float) (lhs));                            \
+                UTBOT_SHOW("right", (float) (rhs));                           \
+            }                                                                 \
         }                                                                     \
     } while (0)
 
 #define EXPECT_DOUBLE_EQ(lhs, rhs)                                            \
     do {                                                                      \
         if (!utbot_double_almost_eq((double) (lhs), (double) (rhs))) {        \
-            utbot_report_failure(__FILE__, __LINE__,                          \
-                                 "expected (" #lhs ") equals (" #rhs ")");    \
-            UTBOT_SHOW("left", (double) (lhs));                               \
-            UTBOT_SHOW("right", (double) (rhs));                              \
+            if (utbot_report_failure(__FILE__, __LINE__,                      \
+                                 "expected (" #lhs ") equals (" #rhs ")")) {  \
+                UTBOT_SHOW("left", (double) (lhs));                           \
+                UTBOT_SHOW("right", (double) (rhs));                          \
+            }                                                                 \
         }                                                                     \
     } while (0)
 
@@ -327,6 +367,7 @@ static int utbot_run_tests(int argc, char **argv, const utbot_test_case *cases, 
             continue;
         }
         utbot_current_test_failed = 0;
+        utbot_current_test_reported = 0;
         cases[index].body();
         failed += utbot_current_test_failed;
     }
@@ -419,6 +460,7 @@ static int utbot_run_tests(int argc, char **argv, const utbot_test_case *cases, 
         printf("[ RUN      ] %s\n", shown);
 #endif
         utbot_current_test_failed = 0;
+        utbot_current_test_reported = 0;
         cases[index].body();
         if (utbot_current_test_failed) {
             ++failed;
