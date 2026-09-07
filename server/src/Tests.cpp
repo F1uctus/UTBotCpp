@@ -629,10 +629,24 @@ void KTestObjectParser::addToOrder(const std::vector<UTBotKTestObject> &objects,
 
 bool KTestObjectParser::pointToStruct(const types::Type &pointerType,
                                       const UTBotKTestObject &goal) const {
-    // In different situations we may point on the whole struct or on the field with assignment 0
+    // Whether \p goal can be what a pointer of this type points at. The run has
+    // already said it is -- this comes from the object's own pointer table --
+    // so what is being checked is only that the two readings agree well enough
+    // to build a variable out of it.
+    //
+    // Big enough, not exactly the size: the object may be larger than the
+    // pointee, and routinely is. KLEE sizes an object it invents for a symbolic
+    // pointer from the debug information of what the pointer points at, and
+    // falls back to a fixed 64 bytes when that says nothing -- which is what
+    // happens for a pointer to a scalar in a module carrying no such detail.
+    // Asked for exact equality, every one of those was rejected: the pointee
+    // was never given a variable, the field it belonged to was written as NULL,
+    // and the test then dereferenced a null pointer the run had never taken.
+    // In different situations we may point on the whole struct or on the field
+    // with assignment 0, so the pointee is what has to fit, not the object.
     size_t fieldSizeInBits = typesHandler.typeSize(pointerType.baseTypeObj(1));
     size_t pointerVarSizeInBytes = goal.bytes.size();
-    return SizeUtils::bytesToBits(pointerVarSizeInBytes) == fieldSizeInBits;
+    return SizeUtils::bytesToBits(pointerVarSizeInBytes) >= fieldSizeInBits;
 }
 
 void KTestObjectParser::assignTypeUnnamedVar(
